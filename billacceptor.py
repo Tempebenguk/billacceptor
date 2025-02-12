@@ -1,6 +1,6 @@
 import pigpio
 import time
-import os
+import datetime
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -30,11 +30,17 @@ last_pulse_time = time.time()
 last_transaction_time = time.time()
 cooldown = True
 total_amount = 0  # Akumulasi uang dalam sesi transaksi
-log_directory = "/home/eksan/billacceptor/logs"  # Direktori untuk menyimpan log
-log_file = os.path.join(log_directory, "log.txt")
+first_transaction_time = None  # Waktu pertama kali transaksi dimulai
 
-# 📌 Pastikan direktori log ada
-os.makedirs(log_directory, exist_ok=True)
+# 📌 Lokasi penyimpanan log
+LOG_FILE = "/home/pi/logs/log.txt"
+
+# 📌 Fungsi Logging
+def log_transaction(message):
+    """ Fungsi untuk menulis log ke file """
+    with open(LOG_FILE, "a") as log:
+        timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+        log.write(f"{timestamp} {message}\n")
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -49,12 +55,6 @@ pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 1)  # Awal: Aktifkan bill acceptor
 
-def log_transaction(message):
-    """ Menyimpan log transaksi ke file """
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_file, "a") as f:
-        f.write(f"[{timestamp}] {message}\n")
-
 def closest_valid_pulse(pulses):
     """ Menyesuaikan jumlah pulsa dengan nominal uang terdekat menggunakan toleransi hanya untuk Rp. 2.000 ke atas """
     for valid_pulse, amount in PULSE_MAPPING.items():
@@ -68,29 +68,28 @@ def closest_valid_pulse(pulses):
 
 def count_pulse(gpio, level, tick):
     """ Callback untuk menangkap pulsa dari bill acceptor. """
-    global pulse_count, last_pulse_time, last_transaction_time, cooldown, total_amount
+    global pulse_count, last_pulse_time, last_transaction_time, cooldown, total_amount, first_transaction_time
 
-    try:
-        current_time = time.time()
-        interval = current_time - last_pulse_time  # Hitung jarak antar pulsa
+    current_time = time.time()
+    interval = current_time - last_pulse_time  # Hitung jarak antar pulsa
 
-        if cooldown:
-            log_transaction("🔄 Reset cooldown! Lanjutkan akumulasi uang.")
-            cooldown = False
+    if cooldown:
+        print("🔄 Reset cooldown! Lanjutkan akumulasi uang.")
+        cooldown = False
+        first_transaction_time = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")  # Simpan waktu transaksi pertama
 
-        if interval > DEBOUNCE_TIME and interval > MIN_PULSE_INTERVAL:
-            pi.write(EN_PIN, 0)  # Nonaktifkan bill acceptor segera setelah uang masuk
-            pulse_count += 1
-            last_pulse_time = current_time
-            last_transaction_time = current_time  # Reset timer transaksi
-    except Exception as e:
-        log_transaction(f"❌ ERROR: Terjadi kesalahan pada count_pulse: {str(e)}")
+    if interval > DEBOUNCE_TIME and interval > MIN_PULSE_INTERVAL:
+        pi.write(EN_PIN, 0)  # Nonaktifkan bill acceptor segera setelah uang masuk
+        pulse_count += 1
+        last_pulse_time = current_time
+        last_transaction_time = current_time  # Reset timer transaksi
+
+        print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}")
 
 # 📌 Callback untuk menangkap pulsa dari bill acceptor
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
 print("🟢 Bill acceptor siap menerima uang...")
-log_transaction("🟢 Bill acceptor siap menerima uang...")
 
 try:
     while True:
@@ -101,37 +100,49 @@ try:
             pulse_count = 0  # Reset penghitung pulsa untuk sesi berikutnya
 
             corrected_pulses = closest_valid_pulse(received_pulses)
-            
+
+            print(f"🔢 Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}")
+
             if corrected_pulses:
                 received_amount = PULSE_MAPPING[corrected_pulses]
                 total_amount += received_amount
-                
+                print(f"💰 Uang masuk: Rp.{received_amount} (Total sementara: Rp.{total_amount})")
+
+                # 📌 Jika koreksi berbeda, simpan ke log
                 if corrected_pulses != received_pulses:
                     log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
-                
-                log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Total: Rp.{total_amount})")
+
+                # 📌 Simpan waktu transaksi pertama kali
+                if first_transaction_time:
+                    log_transaction(f"🕒 Transaksi pertama kali dimulai pada {first_transaction_time}")
+                    first_transaction_time = None  # Reset setelah dicatat
             else:
-                log_transaction(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
                 print(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
+                log_transaction(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
 
             pi.write(EN_PIN, 1)  # Aktifkan kembali bill acceptor setelah transaksi selesai
 
         if not cooldown:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
-            if remaining_time <= 0:
-                log_transaction(f"🛑 Total akhir transaksi: Rp.{total_amount}")
+            if remaining_time > 0:
+                print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r")
+            else:
                 print("\n==========================")
                 print(f"🛑 Total akhir: Rp.{total_amount}")
                 print("🔻 Perangkat masuk cooldown...")
                 print("==========================")
+
+                log_transaction(f"🛑 Total akhir transaksi: Rp.{total_amount}")
+
                 cooldown = True
                 total_amount = 0  # Reset jumlah uang setelah cooldown selesai
 
         time.sleep(0.1)
 
 except KeyboardInterrupt:
-    log_transaction("🛑 Program dihentikan oleh pengguna.")
     print("\n🛑 Program dihentikan oleh pengguna.")
+    log_transaction("🛑 Program dihentikan oleh pengguna.")
     pi.stop()
 except Exception as e:
-    log_transaction(f"❌ ERROR: Terjadi kesalahan utama pada program: {str(e)}")
+    print(f"❌ ERROR: {str(e)}")
+    log_transaction(f"❌ ERROR: {str(e)}")
