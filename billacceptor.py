@@ -33,7 +33,7 @@ total_amount = 0  # Akumulasi uang dalam sesi transaksi
 first_transaction_time = None  # Waktu pertama kali transaksi dimulai
 
 # 📌 Lokasi penyimpanan log
-LOG_FILE = "/home/pi/logs/log.txt"
+LOG_FILE = "/home/eksan/logs/log.txt"
 
 # 📌 Fungsi Logging
 def log_transaction(message):
