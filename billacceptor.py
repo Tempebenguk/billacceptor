@@ -118,21 +118,27 @@ print("🟢 Bill acceptor siap menerima uang...")
 
 # Fungsi untuk mengirimkan data ke PHP
 def send_to_php(received_amount, total_amount):
-    url = "http://localhost/transaction.php"  # Ganti dengan URL PHP di Raspberry Pi
+    url = "http://localhost/transaction.php" 
     data = {
         "received_amount": received_amount,
         "total_amount": total_amount
     }
 
     try:
+        # Menambahkan debug untuk melihat apa yang dikirimkan
+        print("Data yang dikirim:", data)
         response = requests.post(url, data=data)
+
+        # Cek status kode response
         if response.status_code == 200:
             print("✅ Data berhasil dikirim ke PHP!")
-            print(response.json())  # Menampilkan response dari PHP
+            print(response.json()) 
         else:
             print(f"⚠️ Gagal mengirim data, status code: {response.status_code}")
+            print("Response body:", response.text) 
     except Exception as e:
         print(f"❌ ERROR: {str(e)}")
+
 
 try:
     while True:
