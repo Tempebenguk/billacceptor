@@ -2,6 +2,7 @@ import pigpio
 import time
 import datetime
 import os
+import requests  # Import requests library untuk mengirim data ke PHP
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -115,6 +116,24 @@ pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
 print("🟢 Bill acceptor siap menerima uang...")
 
+# Fungsi untuk mengirimkan data ke PHP
+def send_to_php(received_amount, total_amount):
+    url = "http://localhost/transaction.php"  # Ganti dengan URL PHP di Raspberry Pi
+    data = {
+        "received_amount": received_amount,
+        "total_amount": total_amount
+    }
+
+    try:
+        response = requests.post(url, data=data)
+        if response.status_code == 200:
+            print("✅ Data berhasil dikirim ke PHP!")
+            print(response.json())  # Menampilkan response dari PHP
+        else:
+            print(f"⚠️ Gagal mengirim data, status code: {response.status_code}")
+    except Exception as e:
+        print(f"❌ ERROR: {str(e)}")
+
 try:
     while True:
         current_time = time.time()
@@ -136,6 +155,10 @@ try:
                     log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
                 
                 log_transaction(f"💰 Akumulasi transaksi: Rp.{total_amount}")
+
+                # Kirim data ke PHP setelah transaksi diterima
+                send_to_php(received_amount, total_amount)
+
             else:
                 print(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
                 log_transaction(f"⚠️ Pulsa tidak valid: {received_pulses}")
