@@ -2,7 +2,7 @@ import pigpio
 import time
 import datetime
 import os
-import requests  # Import requests library untuk mengirim data ke PHP
+import requests
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -72,11 +72,10 @@ pi.write(EN_PIN, 1)  # Awal: Aktifkan bill acceptor
 def closest_valid_pulse(pulses):
     """ Koreksi jumlah pulsa dengan toleransi ±2 kecuali untuk Rp. 1000 dan Rp. 2000 """
     if pulses == 1:
-        return 1  # Rp. 1000 harus pas
+        return 1  
     
-    # Toleransi khusus untuk Rp. 2000
     if 2 < pulses < 5:
-        return 2  # Koreksi ke 2 jika antara 3-4 pulsa
+        return 2 
 
     closest_pulse = None
     min_diff = float("inf")
@@ -118,7 +117,7 @@ print("🟢 Bill acceptor siap menerima uang...")
 
 # Fungsi untuk mengirimkan data ke PHP
 def send_to_php(received_amount, total_amount):
-    url = "http://localhost/transaction.php" 
+    url = "http://localhost/index.php" 
     data = {
         "received_amount": received_amount,
         "total_amount": total_amount
