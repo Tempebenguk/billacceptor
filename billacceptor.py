@@ -26,7 +26,7 @@ PULSE_MAPPING = {
 }
 
 # 📌 Lokasi penyimpanan log
-LOG_DIR = "/home/eksan/bollacceptor/logs"
+LOG_DIR = "/home/eksan/logs"
 LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 
 # 📌 Buat folder logs/ jika belum ada
