@@ -12,12 +12,12 @@ TIMEOUT = 15  # Waktu maksimum transaksi sebelum cooldown (detik)
 PULSE_TIMEOUT = 0.3  # Batas waktu antara pulsa untuk menentukan akhir transaksi (detik)
 DEBOUNCE_TIME = 0.05  # 50ms debounce berdasarkan debug
 MIN_PULSE_INTERVAL = 0.04  # 40ms minimum interval untuk menghindari pulsa ganda
-TOLERANCE = 2  # Toleransi ±2 pulsa (hanya untuk nominal Rp. 2.000 ke atas)
+TOLERANCE = 2  # Toleransi ±2 pulsa (kecuali Rp. 1.000 & Rp. 2.000)
 
 # 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
     1: 1000,   # Tanpa toleransi
-    2: 2000,   # Dengan toleransi ±2
+    2: 2000,   # Dengan toleransi khusus (3-4 pulsa tetap 2)
     5: 5000,   # Dengan toleransi ±2
     10: 10000, # Dengan toleransi ±2
     20: 20000, # Dengan toleransi ±2
@@ -26,7 +26,7 @@ PULSE_MAPPING = {
 }
 
 # 📌 Lokasi penyimpanan log
-LOG_DIR = "/home/eksan/billacceptor/logs"
+LOG_DIR = "/home/eksan/bollacceptor/logs"
 LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 
 # 📌 Buat folder logs/ jika belum ada
@@ -69,13 +69,25 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 1)  # Awal: Aktifkan bill acceptor
 
 def closest_valid_pulse(pulses):
-    """ Koreksi jumlah pulsa dengan toleransi ±2 kecuali untuk Rp. 1000 """
-    for valid_pulse, amount in PULSE_MAPPING.items():
-        if valid_pulse == 1 and pulses == 1:
-            return 1  # Rp. 1000 harus pas
-        elif abs(pulses - valid_pulse) <= TOLERANCE:
-            return valid_pulse
-    return None  # Jika tidak sesuai nominal, anggap tidak valid
+    """ Koreksi jumlah pulsa dengan toleransi ±2 kecuali untuk Rp. 1000 dan Rp. 2000 """
+    if pulses == 1:
+        return 1  # Rp. 1000 harus pas
+    
+    # Toleransi khusus untuk Rp. 2000
+    if 2 < pulses < 5:
+        return 2  # Koreksi ke 2 jika antara 3-4 pulsa
+
+    closest_pulse = None
+    min_diff = float("inf")
+
+    for valid_pulse in PULSE_MAPPING.keys():
+        if valid_pulse != 1 and abs(pulses - valid_pulse) <= TOLERANCE:
+            diff = abs(pulses - valid_pulse)
+            if diff < min_diff:
+                min_diff = diff
+                closest_pulse = valid_pulse
+
+    return closest_pulse  # Mengembalikan pulsa yang sudah dikoreksi atau None jika tidak valid
 
 def count_pulse(gpio, level, tick):
     """ Callback untuk menangkap pulsa dari bill acceptor """
@@ -123,7 +135,7 @@ try:
                 if corrected_pulses != received_pulses:
                     log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
                 
-                log_transaction(f"💰 Akumulasi transaksi pada {datetime.datetime.now()} : Rp.{total_amount}")
+                log_transaction(f"💰 Akumulasi transaksi: Rp.{total_amount}")
             else:
                 print(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
                 log_transaction(f"⚠️ Pulsa tidak valid: {received_pulses}")
@@ -135,12 +147,13 @@ try:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
             if remaining_time > 0:
                 print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r", flush=True)
-            if remaining_time <= 0:
-                print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
+            else:
+                print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")  # 🔍 DEBUG
                 log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
+                
                 cooldown = True
                 total_amount = 0  # Reset total setelah dicatat
-                print("🔄 Bill acceptor siap menerima transaksi baru...")
+                print("🔄 Bill acceptor siap menerima transaksi baru...")  # 🔍 DEBUG
 
         time.sleep(0.1)
 
