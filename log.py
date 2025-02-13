@@ -2,10 +2,10 @@ import os
 import subprocess
 from datetime import datetime
 
-log_file = "/home/eksan/logs/log.txt"
+log_file = "/var/www/html/logs/log.txt"
 
 date_str = datetime.now().strftime('%Y-%m-%d')
-renamed_log_file = f"/home/eksan/logs/log_{date_str}.txt"
+renamed_log_file = f"/var/www/html/logs/log_{date_str}.txt"
 
 os.rename(log_file, renamed_log_file)
 
