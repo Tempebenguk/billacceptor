@@ -32,13 +32,13 @@ LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 # 📌 Buat folder logs/ jika belum ada
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
-    print(f"📁 Folder log dibuat: {LOG_DIR}")  # 🔍 DEBUG
+    print(f"📁 Folder log dibuat: {LOG_DIR}")
 
 # 📌 Buat file log jika belum ada
 if not os.path.exists(LOG_FILE):
     with open(LOG_FILE, "w") as log:
         log.write("=== LOG TRANSAKSI BILL ACCEPTOR ===\n")
-    print(f"📝 File log dibuat: {LOG_FILE}")  # 🔍 DEBUG
+    print(f"📝 File log dibuat: {LOG_FILE}")
 
 # 📌 Fungsi Logging
 def log_transaction(message):
@@ -60,16 +60,13 @@ pi = pigpio.pi()
 
 if not pi.connected:
     log_transaction("⚠️ Gagal terhubung ke pigpio daemon! Pastikan pigpiod berjalan.")
-    print("⚠️ Gagal terhubung ke pigpio daemon! Pastikan pigpiod berjalan.")  # 🔍 DEBUG
+    print("⚠️ Gagal terhubung ke pigpio daemon! Pastikan pigpiod berjalan.")
     exit()
 
 pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 1)  # Awal: Aktifkan bill acceptor
-
-print("🔧 Inisialisasi selesai. Menunggu transaksi...")  # 🔍 DEBUG
-print("🟢 Bill acceptor siap menerima uang...")  # 🔍 DEBUG
 
 def closest_valid_pulse(pulses):
     """ Koreksi jumlah pulsa dengan toleransi ±2 kecuali untuk Rp. 1000 """
@@ -88,30 +85,27 @@ def count_pulse(gpio, level, tick):
     interval = current_time - last_pulse_time
 
     if cooldown:
-        print("🔄 Reset cooldown! Lanjutkan akumulasi uang.")  # 🔍 DEBUG
+        print("🔄 Reset cooldown! Lanjutkan akumulasi uang.")
         cooldown = False
         first_transaction_time = datetime.datetime.now()
         log_transaction(f"🕒 Transaksi pertama kali dimulai pada {first_transaction_time}")
 
     if interval > DEBOUNCE_TIME and interval > MIN_PULSE_INTERVAL:
         pi.write(EN_PIN, 0)  # Nonaktifkan bill acceptor segera setelah uang masuk
-        print("🛑 Bill acceptor dinonaktifkan sementara (uang masuk).")  # 🔍 DEBUG
-        
         pulse_count += 1
         last_pulse_time = current_time
         last_transaction_time = current_time
 
-        print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}")  # 🔍 DEBUG
+        print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}")
 
 # 📌 Callback untuk menangkap pulsa dari bill acceptor
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
+print("🟢 Bill acceptor siap menerima uang...")
+
 try:
     while True:
         current_time = time.time()
-
-        if not cooldown:
-            print(f"⏳ Transaksi berjalan... Total saat ini: Rp.{total_amount}", end="\r")  # 🔍 DEBUG
 
         # 📌 Jika ada pulsa masuk dan lebih dari PULSE_TIMEOUT, anggap transaksi selesai
         if pulse_count > 0 and (current_time - last_pulse_time > PULSE_TIMEOUT):
@@ -124,33 +118,36 @@ try:
                 received_amount = PULSE_MAPPING[corrected_pulses]
                 total_amount += received_amount
                 print(f"💰 Uang masuk: Rp.{received_amount} (Total sementara: Rp.{total_amount}) "
-                      f"[Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}]")  # 🔍 DEBUG
+                      f"[Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}]")
 
                 if corrected_pulses != received_pulses:
                     log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
-                    print(f"🔧 Pulsa dikoreksi dari {received_pulses} ke {corrected_pulses}")  # 🔍 DEBUG
                 
                 log_transaction(f"💰 Akumulasi transaksi pada {datetime.datetime.now()} : Rp.{total_amount}")
             else:
-                print(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")  # 🔍 DEBUG
+                print(f"⚠️ WARNING: Pulsa tidak valid ({received_pulses} pulsa). Transaksi dibatalkan.")
                 log_transaction(f"⚠️ Pulsa tidak valid: {received_pulses}")
 
             pi.write(EN_PIN, 1)  # Aktifkan kembali bill acceptor
-            print("🟢 Bill acceptor diaktifkan kembali dan siap menerima uang.")  # 🔍 DEBUG
 
+        # 📌 Jika sudah melewati TIMEOUT, transaksi dianggap selesai
         if not cooldown:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
+            if remaining_time > 0:
+                print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r", flush=True)
             if remaining_time <= 0:
-                log_transaction(f"🛑 Total akhir transaksi: Rp.{total_amount}")
+                print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
+                log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
                 cooldown = True
-                total_amount = 0
+                total_amount = 0  # Reset total setelah dicatat
+                print("🔄 Bill acceptor siap menerima transaksi baru...")
 
         time.sleep(0.1)
 
 except KeyboardInterrupt:
-    print("\n🛑 Program dihentikan oleh pengguna.")  # 🔍 DEBUG
+    print("\n🛑 Program dihentikan oleh pengguna.")
     log_transaction("🛑 Program dihentikan oleh pengguna.")
     pi.stop()
 except Exception as e:
-    print(f"❌ ERROR: {str(e)}")  # 🔍 DEBUG
+    print(f"❌ ERROR: {str(e)}")
     log_transaction(f"❌ ERROR: {str(e)}")
