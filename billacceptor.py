@@ -95,6 +95,7 @@ def count_pulse(gpio, level, tick):
         pulse_count += 1
         last_pulse_time = current_time
         last_transaction_time = current_time
+        print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}")
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 print("🟢 Bill acceptor siap menerima uang...")
@@ -123,6 +124,10 @@ try:
             if corrected_pulses:
                 received_amount = PULSE_MAPPING[corrected_pulses]
                 total_amount += received_amount
+                print(f"💰 Uang masuk: Rp.{received_amount} (Total sementara: Rp.{total_amount}) "
+                      f"[Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}]")
+                if corrected_pulses != received_pulses:
+                    log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
                 log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Total: Rp.{total_amount})")
                 send_to_php(received_amount, total_amount)
             else:
@@ -130,12 +135,15 @@ try:
             pi.write(EN_PIN, 1)
         if not cooldown:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
-            if remaining_time <= 0 and not transaction_completed:
+            if remaining_time > 0:
+                print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r", flush=True)
+            else:
+                print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")  # 🔍 DEBUG
                 log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
-                transaction_completed = True
+                
                 cooldown = True
-                total_amount = 0
-                print("🔄 Bill acceptor siap menerima transaksi baru...")
+                total_amount = 0  # Reset total setelah dicatat
+                print("🔄 Bill acceptor siap menerima transaksi baru...")  # 🔍 DEBUG
         time.sleep(0.1)
 except KeyboardInterrupt:
     log_transaction("🛑 Program dihentikan oleh pengguna.")
