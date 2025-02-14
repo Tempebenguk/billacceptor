@@ -89,7 +89,7 @@ def count_pulse(gpio, level, tick):
     if cooldown:
         cooldown = False
         transaction_completed = False
-        log_transaction("🕒 Transaksi dimulai")
+        log_transaction("\ud83d\udd52 Transaksi dimulai")  # ✅ Hanya log sekali
     if interval > DEBOUNCE_TIME and interval > MIN_PULSE_INTERVAL:
         pi.write(EN_PIN, 0)
         pulse_count += 1
@@ -98,7 +98,7 @@ def count_pulse(gpio, level, tick):
         print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}")
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-print("🟢 Bill acceptor siap menerima uang...")
+print("\ud83d\udfe2 Bill acceptor siap menerima uang...")
 
 # 📌 Fungsi kirim data ke PHP
 def send_to_php(received_amount, total_amount):
@@ -124,26 +124,25 @@ try:
             if corrected_pulses:
                 received_amount = PULSE_MAPPING[corrected_pulses]
                 total_amount += received_amount
-                print(f"💰 Uang masuk: Rp.{received_amount} (Total sementara: Rp.{total_amount}) "
-                      f"[Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}]")
-                if corrected_pulses != received_pulses:
-                    log_transaction(f"⚠️ Pulsa dikoreksi! Dari {received_pulses} ke {corrected_pulses}")
-                log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Total: Rp.{total_amount})")
-                send_to_php(received_amount, total_amount)
-            else:
-                log_transaction(f"⚠️ Pulsa tidak valid: {received_pulses}")
-            pi.write(EN_PIN, 1)
+
+                log_message = f"💰 Uang masuk: Rp.{received_amount} (Total: Rp.{total_amount}) [Pulsa asli: {received_pulses}, Dikoreksi: {corrected_pulses}]"
+                log_transaction(log_message)  # ✅ Hanya satu log
+                print(log_message)
+
+                if not transaction_completed:  # ✅ Data hanya dikirim sekali ke PHP
+                    send_to_php(received_amount, total_amount)
+                    transaction_completed = True
+
         if not cooldown:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
             if remaining_time > 0:
                 print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r", flush=True)
             else:
                 print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")  # 🔍 DEBUG
-                log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
-                
+                log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")  # ✅ Hanya satu log
                 cooldown = True
                 total_amount = 0  # Reset total setelah dicatat
-                print("🔄 Bill acceptor siap menerima transaksi baru...")  # 🔍 DEBUG
+                print("🔄 Bill acceptor siap menerima transaksi baru...")
         time.sleep(0.1)
 except KeyboardInterrupt:
     log_transaction("🛑 Program dihentikan oleh pengguna.")
