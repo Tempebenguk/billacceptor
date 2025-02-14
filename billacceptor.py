@@ -102,7 +102,7 @@ print("✅ Bill acceptor siap menerima uang...")
 
 # 📌 Fungsi kirim data ke PHP
 def send_to_php(received_amount, total_amount):
-    url = "http://localhost/index.php"
+    url = "http://localhost/web_billacceptor/index.php"
     data = {"received_amount": received_amount, "total_amount": total_amount}
     try:
         response = requests.post(url, data=data)
