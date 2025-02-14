@@ -159,17 +159,14 @@ try:
         # 📌 Jika sudah melewati TIMEOUT, transaksi dianggap selesai
         if not cooldown:
             remaining_time = TIMEOUT - (current_time - last_transaction_time)
-            if remaining_time > 0:
-                print(f"⏳ Cooldown sisa {int(remaining_time)} detik...", end="\r", flush=True)
-            else:
+            if remaining_time <= 0:
                 print(f"\n🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")  # 🔍 DEBUG
-                log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}")
-                
+                log_transaction(f"🛑 Transaksi selesai! Total akhir: Rp.{total_amount}") 
                 cooldown = True
-                total_amount = 0  # Reset total setelah dicatat
-                print("🔄 Bill acceptor siap menerima transaksi baru...")  # 🔍 DEBUG
+                total_amount = 0 # Reset total setelah dicatat
+                print("🔄 Bill acceptor siap menerima transaksi baru...") # 🔍 DEBUG
 
-        time.sleep(0.1) 
+        time.sleep(0.1)
 
 except KeyboardInterrupt:
     log_transaction("🛑 Program dihentikan oleh pengguna.")
