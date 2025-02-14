@@ -114,6 +114,7 @@ def count_pulse(gpio, level, tick):
 
 # 📌 Callback untuk menangkap pulsa
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
+print("🟢 Bill acceptor siap menerima uang...")
 
 # 📌 Fungsi mengirim data ke PHP
 def send_to_php(received_amount, total_amount):
