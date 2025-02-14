@@ -89,7 +89,7 @@ def count_pulse(gpio, level, tick):
     if cooldown:
         cooldown = False
         transaction_completed = False
-        log_transaction("\ud83d\udd52 Transaksi dimulai")  # ✅ Hanya log sekali
+        log_transaction("🕒 Transaksi dimulai")  # ✅ Hanya log sekali
     if interval > DEBOUNCE_TIME and interval > MIN_PULSE_INTERVAL:
         pi.write(EN_PIN, 0)
         pulse_count += 1
