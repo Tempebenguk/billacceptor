@@ -142,5 +142,5 @@ def send_feedback():
     
     return jsonify({"status": "error", "message": "Terjadi kesalahan"})
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
