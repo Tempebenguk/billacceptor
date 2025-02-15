@@ -77,12 +77,11 @@ def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, transaction_active, remaining_balance, cooldown_start
     current_time = time.time()
 
-    # Pastikan pulsa tidak dihitung dua kali karena bouncing
     if transaction_active and (current_time - last_pulse_time) > MIN_PULSE_INTERVAL:
         pulse_count += 1
         last_pulse_time = current_time
         cooldown_start = time.time()  # Reset cooldown setiap ada uang masuk
-        pi.write(EN_PIN, 1)  # Tutup bill acceptor sementara
+        pi.write(EN_PIN, 0)  # Biarkan bill acceptor tetap terbuka
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
@@ -97,66 +96,58 @@ def trigger_transaction():
     if total <= 0 or id_trx is None:
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
 
-    # Aktifkan bill acceptor jika total valid
     remaining_balance = total
     transaction_active = True
     cooldown_start = time.time()
     
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
-    pi.write(EN_PIN, 0)  # Aktifkan bill acceptor
+    pi.write(EN_PIN, 0)  # Buka bill acceptor (aktif)
     return jsonify({"status": "success", "message": "Bill acceptor aktif"})
 
-# 📌 Fungsi untuk mengecek saldo dan mengirim POST ke server
-def check_balance():
+# 📌 Fungsi utama untuk mengecek status transaksi
+def process_transaction():
     global transaction_active, pulse_count, remaining_balance, id_trx, cooldown_start
 
-    if not transaction_active:
-        return
+    while transaction_active:
+        current_time = time.time()
 
-    current_time = time.time()
-    
-    if pulse_count > 0 and (current_time - last_pulse_time > PULSE_TIMEOUT):
-        received_pulses = pulse_count
-        pulse_count = 0
-        corrected_pulses = closest_valid_pulse(received_pulses)
+        # Jika ada pulsa masuk
+        if pulse_count > 0 and (current_time - last_pulse_time > PULSE_TIMEOUT):
+            received_pulses = pulse_count
+            pulse_count = 0
+            corrected_pulses = closest_valid_pulse(received_pulses)
 
-        if corrected_pulses:
-            received_amount = PULSE_MAPPING[corrected_pulses]
-            remaining_balance -= received_amount
-            log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Sisa: Rp.{remaining_balance})")
-            pi.write(EN_PIN, 0)  # Buka kembali bill acceptor
+            if corrected_pulses:
+                received_amount = PULSE_MAPPING[corrected_pulses]
+                remaining_balance -= received_amount
+                log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Sisa: Rp.{remaining_balance})")
+                pi.write(EN_PIN, 0)  # Biarkan bill acceptor tetap terbuka
 
-        # Jika pembayaran selesai
-        if remaining_balance <= 0:
-            log_transaction(f"✅ Pembayaran transaksi {id_trx} selesai.")
+            # Jika pembayaran selesai
+            if remaining_balance <= 0:
+                log_transaction(f"✅ Pembayaran transaksi {id_trx} selesai.")
+                transaction_active = False
+                pi.write(EN_PIN, 1)  # Tutup bill acceptor (standby)
+                requests.post("http://172.16.100.160:5000/api/receive", json={
+                    "id_trx": id_trx,
+                    "status": "success",
+                    "remaining": 0
+                })
+                return
+
+        # Timeout transaksi
+        if (current_time - cooldown_start) > TIMEOUT:
+            log_transaction("⚠️ Timeout! Menutup transaksi.")
+            pi.write(EN_PIN, 1)  # Tutup bill acceptor (standby)
             transaction_active = False
-            pi.write(EN_PIN, 1)  # Tutup bill acceptor
             requests.post("http://172.16.100.160:5000/api/receive", json={
                 "id_trx": id_trx,
-                "status": "success",
-                "remaining": 0
+                "status": "pending",
+                "remaining": remaining_balance
             })
             return
 
-    # Timeout
-    if (current_time - cooldown_start) > TIMEOUT:
-        log_transaction("⚠️ Timeout! Menutup transaksi.")
-        pi.write(EN_PIN, 1)
-        transaction_active = False
-        requests.post("http://172.16.100.160:5000/api/receive", json={
-            "id_trx": id_trx,
-            "status": "pending",
-            "remaining": remaining_balance
-        })
-
-# 📌 API Endpoint untuk mengecek status transaksi secara berkala
-@app.route("/api/status", methods=["GET"])
-def status_check():
-    check_balance()
-    return jsonify({
-        "status": "processing" if transaction_active else "idle",
-        "remaining_balance": remaining_balance
-    })
+        time.sleep(0.1)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
