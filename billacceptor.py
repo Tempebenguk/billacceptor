@@ -42,7 +42,7 @@ def log_transaction(message):
     print(message)
 
 # 📌 Inisialisasi Flask
-app = Flask(_name_)
+app = Flask(__name__)
 
 # 📌 Variabel Global
 pulse_count = 0
@@ -142,5 +142,5 @@ def send_feedback():
     
     return jsonify({"status": "error", "message": "Terjadi kesalahan"})
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     app.run(host="0.0.0.0", port=5000, debug=True)
