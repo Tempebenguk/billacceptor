@@ -70,21 +70,20 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx
+    global pulse_count, last_pulse_time, transaction_active
 
     if not transaction_active:
         return
 
     current_time = time.time()
 
-    # Pastikan debounce
+    # Hanya hitung pulsa jika selisih waktu lebih besar dari DEBOUNCE_TIME
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
-        last_pulse_time = current_time  # Update waktu terakhir pulsa
+        last_pulse_time = current_time
+        time.sleep(0.01)  # Tambahkan delay untuk menghindari pembacaan ganda
         log_transaction(f"🔍 Pulsa: {pulse_count}, Selisih waktu: {current_time - last_pulse_time}")
-    # Debugging untuk melihat waktu
-    log_transaction(f"⏳ Waktu terakhir pulsa: {last_pulse_time}, Waktu sekarang: {current_time}")
     
     # Menggunakan perbedaan waktu untuk menentukan apakah pulsa telah berhenti
     if (current_time - last_pulse_time) > PULSE_TIMEOUT:
