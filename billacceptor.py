@@ -6,8 +6,8 @@ import requests
 from flask import Flask, request, jsonify
 
 # 📌 Konfigurasi PIN GPIO
-BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
-EN_PIN = 15             # Pin enable untuk mengaktifkan bill acceptor
+BILL_ACCEPTOR_PIN = 14  # Pin DT
+EN_PIN = 15             # Pin EN
 
 # 📌 Konfigurasi transaksi
 TIMEOUT = 15  # Waktu maksimum transaksi sebelum cooldown (detik)
@@ -60,14 +60,14 @@ if not pi.connected:
 pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
-pi.write(EN_PIN, 0)  # Standby mode (bill acceptor tertutup)
+pi.write(EN_PIN, 0)
 
 # 📌 Koreksi jumlah pulsa
 def closest_valid_pulse(pulses):
     if pulses == 1:
-        return 1  # Rp. 1000 harus pas
+        return 1
     if 2 < pulses < 5:
-        return 2  # Koreksi ke 2 jika antara 3-4 pulsa
+        return 2
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
@@ -79,8 +79,8 @@ def count_pulse(gpio, level, tick):
         if (current_time - last_pulse_time) > DEBOUNCE_TIME:
             pulse_count += 1
             last_pulse_time = current_time
-            cooldown_start = time.time()  # Reset cooldown setiap ada uang masuk
-            pi.write(EN_PIN, 1)  # Biarkan bill acceptor tetap terbuka
+            cooldown_start = time.time()
+            pi.write(EN_PIN, 1)
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
@@ -103,7 +103,7 @@ def trigger_transaction():
     cooldown_start = time.time()
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     
-    pi.write(EN_PIN, 1)  # Aktifkan bill acceptor (buka)
+    pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 # 📌 API Endpoint untuk mengirimkan hasil transaksi
@@ -124,18 +124,18 @@ def send_feedback():
                 received_amount = PULSE_MAPPING[corrected_pulses]
                 remaining_balance -= received_amount
                 log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Sisa: Rp.{remaining_balance})")
-                pi.write(EN_PIN, 1)  # Biarkan bill acceptor tetap terbuka
+                pi.write(EN_PIN, 1)
             
             if remaining_balance <= 0:
                 log_transaction(f"✅ Pembayaran transaksi {id_trx} selesai.")
                 transaction_active = False
-                pi.write(EN_PIN, 0)  # Tutup bill acceptor (standby)
+                pi.write(EN_PIN, 0)
                 requests.post("http://172.16.100.160:5000/api/receive", json={"id_trx": id_trx, "status": "success", "remaining": 0})
                 return jsonify({"status": "success", "message": "Pembayaran selesai"})
         
         if (current_time - cooldown_start) > TIMEOUT:
             log_transaction("⚠️ Timeout! Menutup transaksi.")
-            pi.write(EN_PIN, 0)  # Tutup bill acceptor (standby)
+            pi.write(EN_PIN, 0)
             transaction_active = False
             requests.post("http://172.16.100.160:5000/api/receive", json={"id_trx": id_trx, "status": "pending", "remaining": remaining_balance})
             return jsonify({"status": "error", "message": "Timeout"})
