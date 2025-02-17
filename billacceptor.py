@@ -83,43 +83,43 @@ def count_pulse(gpio, level, tick):
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
 
-    # Jika pulsa tidak bertambah dalam batas waktu tertentu, lakukan koreksi pulsa
-    if (current_time - last_pulse_time) > PULSE_TIMEOUT:
-        corrected_pulses = closest_valid_pulse(pulse_count)
-        
-        if corrected_pulses:
-            received_amount = PULSE_MAPPING[corrected_pulses]
-            total_inserted += received_amount  # Menyimpan total uang yang dikonversi
-            log_transaction(f"💰 Pulsa valid: {pulse_count}, dikonversi menjadi Rp.{received_amount}")
-            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+        # Jika pulsa tidak bertambah dalam batas waktu tertentu, lakukan koreksi pulsa
+        if (current_time - last_pulse_time) > PULSE_TIMEOUT:
+            corrected_pulses = closest_valid_pulse(pulse_count)
+            
+            if corrected_pulses:
+                received_amount = PULSE_MAPPING[corrected_pulses]
+                total_inserted += received_amount  # Menyimpan total uang yang dikonversi
+                log_transaction(f"💰 Pulsa valid: {pulse_count}, dikonversi menjadi Rp.{received_amount}")
+                log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
 
-            # Reset pulse count setelah konversi
-            pulse_count = 0
+                # Reset pulse count setelah konversi
+                pulse_count = 0
 
-            # Mengurangi saldo hanya setelah konversi selesai
-            remaining_balance -= received_amount
-            log_transaction(f"💳 Sisa tagihan: Rp.{remaining_balance}")
+                # Mengurangi saldo hanya setelah konversi selesai
+                remaining_balance -= received_amount
+                log_transaction(f"💳 Sisa tagihan: Rp.{remaining_balance}")
 
-            if remaining_balance <= 0:
-                overpaid_amount = max(0, total_inserted - (remaining_balance + received_amount))
-                transaction_active = False
-                pi.write(EN_PIN, 0)
+                if remaining_balance <= 0:
+                    overpaid_amount = max(0, total_inserted - (remaining_balance + received_amount))
+                    transaction_active = False
+                    pi.write(EN_PIN, 0)
 
-                log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
+                    log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
 
-                try:
-                    response = requests.post("http://172.16.100.160:5000/api/receive",
-                                             json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
-                                             timeout=5)
-                    log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
-                except requests.exceptions.RequestException as e:
-                    log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+                    try:
+                        response = requests.post("http://172.16.100.160:5000/api/receive",
+                                                json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
+                                                timeout=5)
+                        log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+                    except requests.exceptions.RequestException as e:
+                        log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-                total_inserted = 0  # Reset setelah transaksi selesai
-                remaining_balance = 0  # Reset saldo
-            else:
-                # log_transaction("⏳ Menunggu uang tambahan...")  # Bisa ditambahkan jika ingin logging
-                pass  # Tidak ada aksi, hanya menunggu uang tambahan
+                    total_inserted = 0  # Reset setelah transaksi selesai
+                    remaining_balance = 0  # Reset saldo
+                else:
+                    # log_transaction("⏳ Menunggu uang tambahan...")  # Bisa ditambahkan jika ingin logging
+                    pass  # Tidak ada aksi, hanya menunggu uang tambahan
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
