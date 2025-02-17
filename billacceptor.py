@@ -82,7 +82,7 @@ def count_pulse(gpio, level, tick):
         pulse_count += 1
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
-
+        log_transaction(f"🔍 Pulsa: {pulse_count}, Selisih waktu: {current_time - last_pulse_time}")
     # Debugging untuk melihat waktu
     log_transaction(f"⏳ Waktu terakhir pulsa: {last_pulse_time}, Waktu sekarang: {current_time}")
     
