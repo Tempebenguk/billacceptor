@@ -84,7 +84,7 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
 
         #Koreksi pulsa masuk
-        corrected_pulses = int(closest_valid_pulse(pulse_count))
+        corrected_pulses = closest_valid_pulse(pulse_count)
 
 
         # Update remaining_balance setiap kali pulsa dihitung
@@ -92,7 +92,7 @@ def count_pulse(gpio, level, tick):
         # print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance*1000}", end="")
 
         # Cek apakah saldo sudah cukup atau berlebih
-        if remaining_balance == int(corrected_pulses):
+        if remaining_balance == corrected_pulses:
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
@@ -123,7 +123,7 @@ def count_pulse(gpio, level, tick):
 
         elif remaining_balance < corrected_pulses:
         #Jika ada kelebihan bayar, selesai transaksi
-            corrected_pulses -= int(remaining_balance)
+            corrected_pulses -= remaining_balance
             print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{corrected_pulses*1000}", end="")
             log_transaction(f"💳 Kelebihan bayar: Rp.{corrected_pulses*1000}. Transaksi selesai.")
             transaction_active = False
