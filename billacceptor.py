@@ -83,9 +83,12 @@ def count_pulse(gpio, level, tick):
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
 
+    # Debugging untuk melihat waktu
+    log_transaction(f"⏳ Waktu terakhir pulsa: {last_pulse_time}, Waktu sekarang: {current_time}")
+    
     # Menggunakan perbedaan waktu untuk menentukan apakah pulsa telah berhenti
     if (current_time - last_pulse_time) > PULSE_TIMEOUT:
-        print(f"⏰ Timeout tercapai, memeriksa pulsa...")  # Debugging
+        log_transaction(f"⏰ Timeout tercapai, memeriksa pulsa...")  # Debugging
         corrected_pulses = closest_valid_pulse(pulse_count)
         
         if corrected_pulses:
@@ -99,7 +102,7 @@ def count_pulse(gpio, level, tick):
 
             # Mengurangi saldo hanya setelah konversi selesai
             remaining_balance -= received_amount
-            print(f"💳 Saldo yang tersisa: Rp.{remaining_balance}")  # Debugging
+            log_transaction(f"💳 Saldo yang tersisa: Rp.{remaining_balance}")  # Debugging
 
             if remaining_balance <= 0:
                 overpaid_amount = max(0, total_inserted - (remaining_balance + received_amount))
@@ -119,7 +122,7 @@ def count_pulse(gpio, level, tick):
                 total_inserted = 0  # Reset setelah transaksi selesai
                 remaining_balance = 0  # Reset saldo
             else:
-                print(f"⏳ Menunggu uang tambahan... (Remaining: Rp.{remaining_balance})")  # Debugging
+                log_transaction(f"⏳ Menunggu uang tambahan... (Remaining: Rp.{remaining_balance})")  # Debugging
                 pass
 
 # Endpoint untuk memulai transaksi
