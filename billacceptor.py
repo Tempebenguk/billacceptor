@@ -94,6 +94,10 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
+        # Update remaining_balance setiap kali pulsa dihitung
+        remaining_balance -= received_amount
+        print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
+
         # Reset waktu cooldown setiap kali pulsa dihitung
         cooldown_start = current_time
 
@@ -111,11 +115,15 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
+        # Update remaining_balance setelah konversi
+        remaining_balance -= received_amount
+        print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
+
         # Cek apakah uang yang dimasukkan sudah cukup
-        if total_inserted >= remaining_balance:
+        if remaining_balance <= 0:
             print(f"\r💳 Uang yang dimasukkan cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
 
-            overpaid_amount = total_inserted - remaining_balance
+            overpaid_amount = total_inserted - (remaining_balance + received_amount)
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
@@ -135,10 +143,10 @@ def count_pulse(gpio, level, tick):
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
         
         # Jika uang yang dimasukkan belum cukup
-        elif total_inserted < remaining_balance:
-            remaining_balance -= total_inserted  # Kurangi saldo tagihan
+        elif remaining_balance > 0:
             print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.", end="")
             log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
+            pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
             total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
 
             # Set cooldown agar menunggu uang selanjutnya
