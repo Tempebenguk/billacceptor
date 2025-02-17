@@ -97,7 +97,21 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Jika uang yang dimasukkan cukup, langsung proses pengurangan tagihan
+    # Proses setelah cooldown selesai
+    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
+        print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
+
+        # Konversi pulsa ke uang setelah cooldown selesai
+        corrected_pulses = closest_valid_pulse(pulse_count)
+        if corrected_pulses:
+            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+            total_inserted += received_amount
+            print(f"\r🔄 Perhitungan pulsa: {pulse_count} pulsa dikonversi menjadi Rp.{received_amount}", end="")  # Debugging
+            print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
+            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+            pulse_count = 0  # Reset pulse count setelah konversi
+
+        # Setelah total uang dihitung, baru proses pengurangan tagihan
         if total_inserted >= remaining_balance:
             overpaid_amount = total_inserted - remaining_balance
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
