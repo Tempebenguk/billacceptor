@@ -91,6 +91,7 @@ def count_pulse(gpio, level, tick):
             total_inserted += received_amount
             print(f"\r🔄 Perhitungan pulsa: {pulse_count} pulsa dikonversi menjadi Rp.{received_amount}", end="")  # Debugging
             print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
+
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
@@ -100,6 +101,14 @@ def count_pulse(gpio, level, tick):
 
         # Reset waktu cooldown setiap kali pulsa dihitung
         cooldown_start = current_time
+
+        # Hitung sisa waktu cooldown
+        cooldown_remaining = TIMEOUT - (current_time - cooldown_start)
+        if cooldown_remaining > 0:
+            print(f"\r⏳ Waktu cooldown tersisa: {int(cooldown_remaining)} detik", end="")
+
+        else:
+            print("\r⏳ Cooldown selesai!", end="")
 
     # Proses setelah cooldown selesai
     if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
@@ -120,21 +129,22 @@ def count_pulse(gpio, level, tick):
         print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
 
         # Cek apakah uang yang dimasukkan sudah cukup
-        if remaining_balance <= 0:
-            print(f"\r💳 Uang yang dimasukkan cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
+        if remaining_balance == 0:
+            print(f"\r💳 Pembayaran sudah cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
 
+            # Kirim status transaksi berhasil
             overpaid_amount = total_inserted - (remaining_balance + received_amount)
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
-            print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}", end="")
-            log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
+            print(f"\r✅ Transaksi selesai! Pembayaran pas.")
+            log_transaction(f"✅ Transaksi {id_trx} selesai. Pembayaran pas.")
 
             # Kirim API bahwa transaksi sudah selesai
             try:
                 print("📡 Mengirim status transaksi ke server...")
                 response = requests.post("http://172.16.100.160:5000/api/receive",
-                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": 0},
                                          timeout=5)
                 print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
                 log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
@@ -142,8 +152,8 @@ def count_pulse(gpio, level, tick):
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
         
-        # Jika uang yang dimasukkan belum cukup
         elif remaining_balance > 0:
+            # Jika uang yang dimasukkan masih kurang
             print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.", end="")
             log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
             pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
@@ -151,6 +161,26 @@ def count_pulse(gpio, level, tick):
 
             # Set cooldown agar menunggu uang selanjutnya
             cooldown_start = time.time()
+
+        else:
+            # Jika uang yang dimasukkan lebih
+            print(f"\r💳 Kelebihan bayar: Rp.{abs(remaining_balance)}, Cooldown dimulai.", end="")
+            log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
+            remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
+            transaction_active = False  # Tandai transaksi selesai
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
+
+            # Kirim status transaksi selesai dan kelebihan bayar
+            try:
+                print("📡 Mengirim status transaksi ke server...")
+                response = requests.post("http://172.16.100.160:5000/api/receive",
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": abs(remaining_balance)},
+                                         timeout=5)
+                print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
+                log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+                print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
