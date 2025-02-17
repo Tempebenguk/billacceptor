@@ -49,7 +49,7 @@ transaction_active = False
 remaining_balance = 0
 id_trx = None
 cooldown_start = None
-total_inserted = 0  # Menyimpan total uang yang dimasukkan
+total_inserted = 0  # Total uang yang dimasukkan
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -71,7 +71,7 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, cooldown_start, remaining_balance
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start
 
     if not transaction_active:
         return
@@ -94,12 +94,13 @@ def count_pulse(gpio, level, tick):
                 log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
                 pulse_count = 0  # Reset counter setelah dikonversi
 
-        # Cek apakah total uang sudah cukup
+        # Jika total uang yang masuk sudah mencukupi atau lebih dari tagihan
         if total_inserted >= remaining_balance:
             overpaid_amount = total_inserted - remaining_balance
             remaining_balance = 0
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
+            
             print(f"✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
             log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
 
