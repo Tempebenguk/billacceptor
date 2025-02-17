@@ -49,8 +49,6 @@ transaction_active = False
 remaining_balance = 0
 id_trx = None
 total_inserted = 0  # Total uang yang dimasukkan
-last_pulse_received_time = time.time()  # Waktu terakhir pulsa diterima
-PULSE_WAIT_TIME = 3  # Waktu tunggu setelah pulsa terakhir (detik)
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -65,7 +63,7 @@ pi.write(EN_PIN, 0)
 
 # Fungsi untuk menghitung pulsa dan memperbarui transaksi
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx, last_pulse_received_time
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx
 
     if not transaction_active:
         return
@@ -88,15 +86,7 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Cek apakah pulsa sudah cukup dan ada penundaan
-        if total_inserted >= remaining_balance:
-            # Jika tagihan sudah tercapai, tunggu beberapa detik untuk melihat apakah ada pulsa lain
-            last_pulse_received_time = current_time  # Update waktu pulsa terakhir diterima
-            print("\r⏳ Menunggu pulsa lebih lanjut sebelum menghitung...", end="")
-
-    # Periksa apakah sudah cukup waktu sejak pulsa terakhir diterima
-    if current_time - last_pulse_received_time > PULSE_WAIT_TIME:
-        # Jika sudah cukup waktu, dan total_inserted sudah cukup untuk menyelesaikan transaksi
+        # Cek apakah saldo sudah cukup atau berlebih
         if total_inserted >= remaining_balance:
             overpaid_amount = total_inserted - remaining_balance  # Kelebihan bayar jika total_inserted > remaining_balance
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
@@ -116,8 +106,6 @@ def count_pulse(gpio, level, tick):
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
-        else:
-            print(f"\r💳 Saldo masih kurang, menunggu pulsa berikutnya...", end="")
 
 # Fungsi untuk mendapatkan pulsa yang valid
 def closest_valid_pulse(pulses):
@@ -154,4 +142,5 @@ def trigger_transaction():
 if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
+    
     app.run(host="0.0.0.0", port=5000, debug=True)
