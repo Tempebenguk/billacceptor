@@ -94,6 +94,9 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
+        # Reset waktu cooldown setiap kali pulsa dihitung
+        cooldown_start = current_time
+
     # Proses setelah cooldown selesai
     if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
         print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
