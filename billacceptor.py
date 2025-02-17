@@ -71,14 +71,47 @@ def closest_valid_pulse(pulses):
 
 def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, transaction_active, remaining_balance, cooldown_start
+
+    if not transaction_active:
+        return
+
     current_time = time.time()
-    if transaction_active:
-        if (current_time - last_pulse_time) > DEBOUNCE_TIME:
-            pulse_count += 1
-            last_pulse_time = current_time
-            cooldown_start = time.time()
-            pi.write(EN_PIN, 1)
-            print(f"Pulsa diterima: {pulse_count}")
+    if (current_time - last_pulse_time) > DEBOUNCE_TIME:
+        pulse_count += 1
+        last_pulse_time = current_time
+        cooldown_start = time.time()
+
+        print(f"🔢 Pulsa diterima: {pulse_count}")
+
+        # Cek apakah pulsa cukup untuk dikonversi ke uang
+        corrected_pulses = closest_valid_pulse(pulse_count)
+        if corrected_pulses:
+            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+            if received_amount > 0:
+                remaining_balance -= received_amount
+                print(f"💰 Uang diterima: Rp.{received_amount}, Sisa tagihan: Rp.{remaining_balance}")
+                log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Sisa: Rp.{remaining_balance})")
+                pulse_count = 0  # Reset counter setelah dikonversi
+
+        # Cek apakah transaksi sudah selesai
+        if remaining_balance <= 0:
+            overpaid_amount = abs(remaining_balance) if remaining_balance < 0 else 0
+            remaining_balance = 0
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
+            print(f"✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
+            log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
+
+            # Kirim API bahwa transaksi sudah selesai
+            try:
+                print("📡 Mengirim status transaksi ke server...")
+                response = requests.post("http://172.16.100.160:5000/api/receive",
+                                         json={"id_trx": id_trx, "status": "success", "remaining": 0, "overpaid": overpaid_amount},
+                                         timeout=5)
+                print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+                print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
@@ -103,46 +136,6 @@ def trigger_transaction():
     
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
-
-@app.route("/api/feedback", methods=["POST"])
-def send_feedback():
-    global transaction_active, pulse_count, remaining_balance, id_trx, cooldown_start
-    
-    if not transaction_active:
-        return jsonify({"status": "idle", "message": "Tidak ada transaksi aktif"})
-    
-    current_time = time.time()
-    while transaction_active:
-        if pulse_count > 0 and (current_time - last_pulse_time > PULSE_TIMEOUT):
-            received_pulses = pulse_count
-            pulse_count = 0
-            corrected_pulses = closest_valid_pulse(received_pulses)
-            if corrected_pulses:
-                received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-                if received_amount > 0:
-                    remaining_balance -= received_amount
-                    log_transaction(f"💰 Uang masuk: Rp.{received_amount} (Sisa: Rp.{remaining_balance})")
-                    print(f"Uang diterima: Rp.{received_amount}, Sisa: Rp.{remaining_balance}")
-                
-                if remaining_balance <= 0:
-                    overpaid_amount = abs(remaining_balance) if remaining_balance < 0 else 0
-                    remaining_balance = 0
-                    log_transaction(f"✅ Pembayaran transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
-                    print(f"Pembayaran transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
-                    transaction_active = False
-                    pi.write(EN_PIN, 0)
-                    try:
-                        response = requests.post("http://172.16.100.160:5000/api/receive", 
-                                                 json={"id_trx": id_trx, "status": "success", "remaining": 0, "overpaid": overpaid_amount}, timeout=5)
-                        print(f"POST sukses: {response.status_code}, Response: {response.text}")
-                    except requests.exceptions.RequestException as e:
-                        log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-                        print(f"⚠️ Gagal mengirim status transaksi: {e}")
-                    return jsonify({"status": "success", "message": "Pembayaran selesai"})
-        
-        time.sleep(0.1)
-    
-    return jsonify({"status": "error", "message": "Terjadi kesalahan"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
