@@ -47,6 +47,7 @@ pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
 remaining_balance = 0
+pending_balance = 0  
 id_trx = None
 cooldown_start = None
 total_inserted = 0  
@@ -71,7 +72,7 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start, id_trx
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, pending_balance, cooldown_start, id_trx
 
     if not transaction_active:
         return
@@ -87,10 +88,16 @@ def count_pulse(gpio, level, tick):
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
             total_inserted += received_amount
-            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+            pending_balance -= received_amount  # Saldo ditahan dulu
+            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}, Pending balance: Rp.{pending_balance}")
             pulse_count = 0  
 
-        # Saldo sementara, agar tidak langsung eksekusi ke 0
+        # Jika pulsa masih ada yang belum dihitung, tunggu sebelum eksekusi saldo
+        if pending_balance > 0:
+            log_transaction(f"⏳ Menunggu pulsa masuk. Pending balance: Rp.{pending_balance}")
+            return  
+
+        # Saldo sementara untuk menentukan status transaksi
         temp_balance = remaining_balance - received_amount
 
         # ✅ Jika saldo MINUS (kelebihan bayar)
@@ -132,13 +139,14 @@ def count_pulse(gpio, level, tick):
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, cooldown_start, total_inserted
+    global transaction_active, remaining_balance, pending_balance, id_trx, cooldown_start, total_inserted
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
     remaining_balance = int(data.get("total", 0))  
+    pending_balance = remaining_balance  
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
