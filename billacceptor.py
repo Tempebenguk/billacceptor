@@ -98,10 +98,9 @@ def count_pulse(gpio, level, tick):
         cooldown_start = current_time
 
     # Proses setelah cooldown selesai
-    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
-        print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
-
+    if (current_time - cooldown_start) > TIMEOUT:
         # Konversi pulsa ke uang setelah cooldown selesai
+        print(f"\r⏰ Cooldown selesai! Pulsa dihitung.")
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -180,4 +179,4 @@ if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
