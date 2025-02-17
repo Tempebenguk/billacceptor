@@ -88,7 +88,10 @@ def process_pulses():
 
     total_pulses = 0  # Reset setelah konversi
 
-    # Baru setelah konversi, hitung saldo
+    # 🕒 Tambahkan delay sebelum saldo dikurangi
+    time.sleep(1)  # Delay 1 detik sebelum mengurangi tagihan
+
+    # Baru setelah delay, hitung saldo
     remaining_balance -= received_amount
     print(f"\r💳 Saldo setelah pembayaran: Rp.{remaining_balance}", end="")
 
