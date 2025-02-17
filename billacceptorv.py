@@ -81,6 +81,7 @@ def count_pulse(gpio, level, tick):
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
+        print()
         last_pulse_time = current_time
 
         #Koreksi pulsa masuk
@@ -116,11 +117,12 @@ def count_pulse(gpio, level, tick):
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-        #elif remaining_balance > 0:
-        #    # Jika saldo masih kurang, lanjutkan transaksi
-        #    print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.", end="")
-        #    log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
-        #    pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
+        elif remaining_balance > corrected_pulses:
+            remaining_balance -= corrected_pulses
+        # Jika saldo masih kurang, lanjutkan transaksi
+            print(f"\r💳 Saldo sisa: Rp.{remaining_balance*1000}, Cooldown dimulai.", end="")
+            log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance*1000}. Transaksi dilanjutkan.")
+            pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
         #    total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
 
             # Set cooldown agar menunggu uang selanjutnya
