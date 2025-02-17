@@ -121,13 +121,13 @@ def count_pulse(gpio, level, tick):
             # Set cooldown agar menunggu uang selanjutnya
         #    cooldown_start = time.time()
 
-        #elif remaining_balance < 0:
-        #    # Jika ada kelebihan bayar, selesai transaksi
-        #    remaining_balance = 0
-        #    print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{abs(remaining_balance)}", end="")
-        #    log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
-        #    transaction_active = False
-        #    pi.write(EN_PIN, 0)  # Matikan bill acceptor
+        elif remaining_balance < corrected_pulses:
+        #Jika ada kelebihan bayar, selesai transaksi
+            corrected_pulses -= remaining_balance
+            print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{corrected_pulses*1000}", end="")
+            log_transaction(f"💳 Kelebihan bayar: Rp.{corrected_pulses*1000}. Transaksi selesai.")
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
