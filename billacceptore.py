@@ -101,7 +101,7 @@ def count_pulse(gpio, level, tick):
         # Cek apakah saldo sudah cukup atau berlebih
         if remaining_balance <= 0:
             # Jika saldo sudah cukup atau lebih
-            overpaid_amount = total_inserted - (remaining_balance + received_amount)
+            overpaid_amount = total_inserted - remaining_balance  # Kelebihan bayar jika total_inserted > remaining_balance
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
@@ -163,7 +163,5 @@ def trigger_transaction():
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
-    # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    
     app.run(host="0.0.0.0", port=5000, debug=True)
