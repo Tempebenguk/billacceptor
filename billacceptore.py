@@ -49,7 +49,7 @@ transaction_active = False
 remaining_balance = 0
 id_trx = None
 cooldown_start = None
-total_inserted = 0
+total_inserted = 0  # Total uang yang dimasukkan
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -82,8 +82,9 @@ def count_pulse(gpio, level, tick):
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        print(f"🔢 Pulsa diterima: {pulse_count}")
+        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging untuk melihat pulsa
 
+        # Konversi pulsa ke uang
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -91,17 +92,23 @@ def count_pulse(gpio, level, tick):
             print(f"\r🔄 Perhitungan pulsa: {pulse_count} pulsa dikonversi menjadi Rp.{received_amount}", end="")  # Debugging
             print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
-            pulse_count = 0
+            pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Kirim data ke API setelah perhitungan selesai
-        if total_inserted >= remaining_balance:
-            overpaid_amount = total_inserted - remaining_balance
-            remaining_balance = 0 
-            transaction_active = False
-            pi.write(EN_PIN, 0)
+        # Update remaining_balance setiap kali pulsa dihitung
+        remaining_balance -= received_amount
+        print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
+
+        # Cek apakah saldo sudah cukup atau berlebih
+        if remaining_balance <= 0:
+            # Jika saldo sudah cukup atau lebih
+            overpaid_amount = total_inserted - (remaining_balance + received_amount)
+            remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
+            transaction_active = False  # Tandai transaksi selesai
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
             print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}", end="")
             log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
 
+            # Kirim API bahwa transaksi sudah selesai
             try:
                 print("📡 Mengirim status transaksi ke server...")
                 response = requests.post("http://172.16.100.174:5000/api/receive",
@@ -114,11 +121,22 @@ def count_pulse(gpio, level, tick):
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
         elif remaining_balance > 0:
+            # Jika saldo masih kurang, lanjutkan transaksi
             print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.", end="")
             log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
-            pulse_count = 0
-            total_inserted = 0
+            pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
+            total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
+
+            # Set cooldown agar menunggu uang selanjutnya
             cooldown_start = time.time()
+
+        elif remaining_balance < 0:
+            # Jika ada kelebihan bayar, selesai transaksi
+            remaining_balance = 0
+            print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{abs(remaining_balance)}", end="")
+            log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
@@ -129,7 +147,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = int(data.get("total", 0))
+    remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
@@ -137,7 +155,7 @@ def trigger_transaction():
     
     transaction_active = True
     cooldown_start = time.time()
-    total_inserted = 0
+    total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
@@ -145,5 +163,7 @@ def trigger_transaction():
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
+    # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
+    
     app.run(host="0.0.0.0", port=5000, debug=True)
