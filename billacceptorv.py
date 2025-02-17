@@ -43,10 +43,10 @@ def log_transaction(message):
 app = Flask(__name__)
 
 # 📌 Variabel Global
-int pulse_count = 0
+pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
-int remaining_balance = 0
+remaining_balance = 0
 id_trx = None
 cooldown_start = None
 total_inserted = 0  # Total uang yang dimasukkan
@@ -84,7 +84,7 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
 
         #Koreksi pulsa masuk
-        int corrected_pulses = closest_valid_pulse(pulse_count)
+        corrected_pulses = int(closest_valid_pulse(pulse_count))
 
 
         # Update remaining_balance setiap kali pulsa dihitung
@@ -123,7 +123,7 @@ def count_pulse(gpio, level, tick):
 
         elif remaining_balance < corrected_pulses:
         #Jika ada kelebihan bayar, selesai transaksi
-            corrected_pulses -= remaining_balance
+            corrected_pulses -= int(remaining_balance)
             print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{corrected_pulses*1000}", end="")
             log_transaction(f"💳 Kelebihan bayar: Rp.{corrected_pulses*1000}. Transaksi selesai.")
             transaction_active = False
@@ -138,7 +138,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = int(data.get("total", 0))/1000  # Pastikan remaining_balance berupa integer
+    remaining_balance = int(data.get("total", 0))//1000  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
