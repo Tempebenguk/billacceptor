@@ -43,10 +43,10 @@ def log_transaction(message):
 app = Flask(__name__)
 
 # 📌 Variabel Global
-pulse_count = 0
+int pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
-remaining_balance = 0
+int remaining_balance = 0
 id_trx = None
 cooldown_start = None
 total_inserted = 0  # Total uang yang dimasukkan
@@ -84,7 +84,7 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
 
         #Koreksi pulsa masuk
-        corrected_pulses = closest_valid_pulse(pulse_count)
+        int corrected_pulses = closest_valid_pulse(pulse_count)
 
 
         # Update remaining_balance setiap kali pulsa dihitung
@@ -92,7 +92,7 @@ def count_pulse(gpio, level, tick):
         # print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance*1000}", end="")
 
         # Cek apakah saldo sudah cukup atau berlebih
-        if remaining_balance == corrected_pulses:
+        if remaining_balance == int(corrected_pulses):
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
