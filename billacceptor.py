@@ -48,7 +48,7 @@ last_pulse_time = time.time()
 transaction_active = False
 remaining_balance = 0
 id_trx = None
-total_inserted = 0  # Total uang yang dimasukkan
+total_inserted = 0  # Total uang yang dikonversi dari pulsa
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -77,30 +77,36 @@ def count_pulse(gpio, level, tick):
 
     current_time = time.time()
 
+    # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
 
-    if (current_time - last_pulse_time) > PULSE_TIMEOUT and pulse_count > 0:
+    # Cek apakah sudah mencapai jeda antar pulsa (PULSE_TIMEOUT)
+    if (current_time - last_pulse_time) > PULSE_TIMEOUT:
         corrected_pulses = closest_valid_pulse(pulse_count)
+        
         if corrected_pulses:
-            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-            log_transaction(f"🔄 Koreksi pulsa: {pulse_count} menjadi {corrected_pulses} (Rp.{received_amount})")
-            total_inserted += received_amount
+            received_amount = PULSE_MAPPING[corrected_pulses]
+            total_inserted += received_amount  # Menyimpan total uang yang dikonversi
+            log_transaction(f"💰 Pulsa valid: {pulse_count}, dikonversi menjadi Rp.{received_amount}")
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
 
-            pulse_count = 0  # Reset pulsa setelah dikonversi
+            # Reset pulse count setelah konversi
+            pulse_count = 0
 
-            remaining_balance -= received_amount
-            log_transaction(f"💳 Saldo tersisa: Rp.{remaining_balance}")
+            # Mengurangi saldo hanya setelah konversi selesai
+            remaining_balance -= total_inserted
+            log_transaction(f"💳 Sisa tagihan: Rp.{remaining_balance}")
 
             if remaining_balance <= 0:
-                overpaid_amount = abs(remaining_balance)
-                remaining_balance = 0
+                overpaid_amount = max(0, total_inserted - (remaining_balance + received_amount))
                 transaction_active = False
                 pi.write(EN_PIN, 0)
-                log_transaction(f"✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
+
+                log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
+
                 try:
                     response = requests.post("http://172.16.100.160:5000/api/receive",
                                              json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
@@ -108,6 +114,12 @@ def count_pulse(gpio, level, tick):
                     log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
                 except requests.exceptions.RequestException as e:
                     log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+
+                total_inserted = 0  # Reset setelah transaksi selesai
+                remaining_balance = 0  # Reset saldo
+            else:
+                # log_transaction("⏳ Menunggu uang tambahan...")  # Bisa ditambahkan jika ingin logging
+                pass  # Tidak ada aksi, hanya menunggu uang tambahan
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
@@ -118,7 +130,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = int(data.get("total", 0))
+    remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
@@ -127,10 +139,22 @@ def trigger_transaction():
     transaction_active = True
     total_inserted = 0
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
+    
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
+# # Fungsi timeout transaksi (Dikomentari sesuai permintaan)
+# def transaction_timeout():
+#     global transaction_active, remaining_balance, total_inserted
+#     while True:
+#         if transaction_active and time.time() - cooldown_start > TIMEOUT:
+#             log_transaction(f"⏳ Transaksi timeout! Uang masuk: Rp.{total_inserted}, Sisa tagihan: Rp.{remaining_balance}")
+#             transaction_active = False
+#             pi.write(EN_PIN, 0)
+#         time.sleep(1)
+
 if __name__ == "__main__":
-    # Pasang callback untuk pin BILL_ACCEPTOR_PIN
+    # import threading
+    # threading.Thread(target=transaction_timeout, daemon=True).start()  # Komentar fungsi timeout
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
