@@ -71,7 +71,7 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, cooldown_start
+    global pulse_count, last_pulse_time, transaction_active, cooldown_start
 
     if not transaction_active:
         return
@@ -81,7 +81,6 @@ def count_pulse(gpio, level, tick):
         pulse_count += 1
         last_pulse_time = current_time
         cooldown_start = time.time()
-
         print(f"🔢 Pulsa diterima: {pulse_count}")
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
@@ -117,17 +116,17 @@ def finish_transaction():
     if not transaction_active:
         return jsonify({"status": "idle", "message": "Tidak ada transaksi aktif"}), 400
 
-    # Konversi pulse ke uang
+    # 🔹 Konversi jumlah pulse ke nominal uang yang masuk
     corrected_pulses = closest_valid_pulse(pulse_count)
-    if corrected_pulses:
-        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-        if received_amount > 0:
-            total_inserted = received_amount
-            print(f"💰 Total uang masuk: Rp.{total_inserted}")
-            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+    received_amount = PULSE_MAPPING.get(corrected_pulses, 0) if corrected_pulses else 0
 
-    # Bandingkan dengan tagihan
-    overpaid_amount = 0
+    # Jika uang masuk valid, simpan sebagai total_inserted
+    if received_amount > 0:
+        total_inserted = received_amount
+        print(f"💰 Total uang masuk: Rp.{total_inserted}")
+        log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+
+    # 🔹 Bandingkan dengan tagihan
     if total_inserted >= remaining_balance:
         overpaid_amount = total_inserted - remaining_balance
         remaining_balance = 0
@@ -137,7 +136,7 @@ def finish_transaction():
         print(f"✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
         log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
 
-        # Kirim API bahwa transaksi sudah selesai
+        # 🔹 Kirim API bahwa transaksi sudah selesai
         try:
             print("📡 Mengirim status transaksi ke server...")
             response = requests.post("http://172.16.100.160:5000/api/receive",
