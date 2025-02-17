@@ -85,8 +85,11 @@ def count_pulse(gpio, level, tick):
 
         #Koreksi pulsa masuk
         corrected_pulses = closest_valid_pulse(pulse_count)
-        print(type(corrected_pulses))
-        #corrected_pulses = int(corrected_pulses)
+
+        if corrected_pulses is None:
+            return 
+
+        corrected_pulses = int(corrected_pulses)
 
 
         # Update remaining_balance setiap kali pulsa dihitung
