@@ -49,7 +49,7 @@ transaction_active = False
 remaining_balance = 0
 id_trx = None
 cooldown_start = None
-total_inserted = 0
+total_inserted = 0  # Uang yang dimasukkan
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -92,14 +92,14 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0
 
-        # Update remaining_balance setiap kali pulsa dihitung
-        remaining_balance -= received_amount
+        # Tidak mengurangi remaining_balance saat pulsa dihitung
         print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
 
         # Kirim data ke API setelah perhitungan selesai
-        if remaining_balance <= 0:
+        if total_inserted >= remaining_balance:
+            # Setelah uang cukup atau berlebih
             overpaid_amount = total_inserted - remaining_balance
-            remaining_balance = 0
+            remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
             print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}", end="")
@@ -123,15 +123,6 @@ def count_pulse(gpio, level, tick):
             pulse_count = 0
             total_inserted = 0
             cooldown_start = time.time()
-
-        elif remaining_balance < 0:
-            # Jika ada kelebihan bayar, selesai transaksi
-            overpaid_amount = total_inserted - remaining_balance
-            remaining_balance = 0
-            print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{abs(remaining_balance)}", end="")
-            log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
-            transaction_active = False
-            pi.write(EN_PIN, 0)
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
