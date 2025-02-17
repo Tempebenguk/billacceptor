@@ -71,36 +71,41 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start, id_trx
 
     if not transaction_active:
         return
 
     current_time = time.time()
+    
+    # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        cooldown_start = time.time()
-
         print(f"🔢 Pulsa diterima: {pulse_count}")
+        
+        # Mulai cooldown jika pulsa terakhir diterima
+        cooldown_start = current_time
 
-        # Cek apakah pulsa cukup untuk dikonversi ke uang
+    # Jika cooldown habis, proses transaksi
+    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
+        print(f"⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}")
+        
+        # Konversi pulsa ke uang
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-            if received_amount > 0:
-                total_inserted += received_amount
-                print(f"💰 Total uang masuk: Rp.{total_inserted}")
-                log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
-                pulse_count = 0  # Reset counter setelah dikonversi
-
-        # Jika total uang yang masuk sudah mencukupi atau lebih dari tagihan
+            total_inserted += received_amount
+            print(f"💰 Total uang masuk: Rp.{total_inserted}")
+            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+            pulse_count = 0  # Reset pulse count setelah konversi
+        
+        # Periksa apakah uang yang dimasukkan cukup atau ada kelebihan
         if total_inserted >= remaining_balance:
             overpaid_amount = total_inserted - remaining_balance
             remaining_balance = 0
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
-            
             print(f"✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
             log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
 
@@ -108,16 +113,24 @@ def count_pulse(gpio, level, tick):
             try:
                 print("📡 Mengirim status transaksi ke server...")
                 response = requests.post("http://172.16.100.160:5000/api/receive",
-                                        json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
-                                        timeout=5)
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
+                                         timeout=5)
                 print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
+        
+        # Jika uang yang dimasukkan belum cukup
+        elif total_inserted < remaining_balance:
+            remaining_balance -= total_inserted  # Kurangi saldo tagihan
+            print(f"💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.")
+            log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
+            total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
 
+            # Set cooldown agar menunggu uang selanjutnya
+            cooldown_start = time.time()
 
-pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-
+# Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
     global transaction_active, remaining_balance, id_trx, cooldown_start, total_inserted
