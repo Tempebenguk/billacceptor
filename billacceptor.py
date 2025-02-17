@@ -78,10 +78,10 @@ def count_pulse(gpio, level, tick):
 
     current_time = time.time()
 
-    # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
+        print(f"🔢 Pulsa diterima: {pulse_count}")
 
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
@@ -90,45 +90,46 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  
 
-        remaining_balance -= received_amount
-        cooldown_start = current_time
+        # Saldo sementara, agar tidak langsung eksekusi ke 0
+        temp_balance = remaining_balance - received_amount
 
-    # ✅ Kondisi 1: Jika saldo PAS (Transaksi selesai dengan nominal pas)
-    if remaining_balance == 0:
-        transaction_active = False
-        pi.write(EN_PIN, 0)  
-        log_transaction(f"✅ Transaksi {id_trx} selesai. Uang pas.")
+        # ✅ Jika saldo MINUS (kelebihan bayar)
+        if temp_balance < 0:
+            overpaid_amount = abs(temp_balance)
+            remaining_balance = 0  
+            transaction_active = False
+            pi.write(EN_PIN, 0)  
+            log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan bayar Rp.{overpaid_amount}")
 
-        try:
-            response = requests.post("http://174.16.100.160:5000/api/receive",
-                                     json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": 0},
-                                     timeout=5)
-            log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
-        except requests.exceptions.RequestException as e:
-            log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+            try:
+                response = requests.post("http://172.16.100.160:5000/api/receive",
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
+                                         timeout=5)
+                log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-    # ✅ Kondisi 2: Jika saldo MINUS (kelebihan bayar)
-    if remaining_balance < 0:
-        overpaid_amount = abs(remaining_balance)
-        remaining_balance = 0  
-        transaction_active = False
-        pi.write(EN_PIN, 0)  
-        log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan bayar Rp.{overpaid_amount}")
+        # ✅ Jika saldo PAS (Transaksi selesai dengan nominal pas)
+        elif temp_balance == 0:
+            remaining_balance = 0  
+            transaction_active = False
+            pi.write(EN_PIN, 0)  
+            log_transaction(f"✅ Transaksi {id_trx} selesai. Uang pas.")
 
-        try:
-            response = requests.post("http://174.16.100.160:5000/api/receive",
-                                     json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
-                                     timeout=5)
-            log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
-        except requests.exceptions.RequestException as e:
-            log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+            try:
+                response = requests.post("http://172.16.100.160:5000/api/receive",
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": 0},
+                                         timeout=5)
+                log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-    # ✅ Kondisi 3: Jika saldo MASIH ADA (Menunggu uang tambahan)
-    if remaining_balance > 0:
-        log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Menunggu uang tambahan...")
-        cooldown_start = time.time()
+        # ✅ Jika saldo MASIH ADA (Menunggu uang tambahan)
+        else:
+            remaining_balance = temp_balance
+            log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Menunggu uang tambahan...")
+            cooldown_start = time.time()
 
-# Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
     global transaction_active, remaining_balance, id_trx, cooldown_start, total_inserted
