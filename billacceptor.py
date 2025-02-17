@@ -62,7 +62,7 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
 # 📌 Tambahkan glitch filter untuk debounce
-pi.set_glitch_filter(BILL_ACCEPTOR_PIN, 2000)  # 1ms debounce
+pi.set_glitch_filter(BILL_ACCEPTOR_PIN, 1500)  # 1ms debounce
 
 def closest_valid_pulse(pulses):
     if pulses == 1:
