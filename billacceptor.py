@@ -50,6 +50,7 @@ transaction_active = False
 remaining_balance = 0
 id_trx = None
 total_inserted = 0  # Total uang yang dimasukkan
+waiting_pulses = False  # Untuk memastikan pulsa dihitung semua sebelum diproses
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -70,24 +71,12 @@ def closest_valid_pulse(pulses):
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
-def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx
+def process_pulses():
+    global pulse_count, total_inserted, remaining_balance, transaction_active, id_trx, waiting_pulses
 
-    if not transaction_active:
-        return
+    if pulse_count == 0:
+        return  # Tidak ada pulsa baru, tidak perlu proses
 
-    current_time = time.time()
-
-    # Pastikan debounce
-    if (current_time - last_pulse_time) > DEBOUNCE_TIME:
-        pulse_count += 1
-        last_pulse_time = current_time
-        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging untuk melihat pulsa
-
-    # Tunggu sampai pulsa selesai masuk
-    time.sleep(PULSE_TIMEOUT)
-
-    # Koreksi total pulsa
     corrected_pulses = closest_valid_pulse(pulse_count)
     if corrected_pulses:
         received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -106,6 +95,7 @@ def count_pulse(gpio, level, tick):
         overpaid_amount = abs(remaining_balance)  # Kelebihan bayar
         remaining_balance = 0  # Pastikan saldo 0 setelah transaksi selesai
         transaction_active = False
+        waiting_pulses = False
         pi.write(EN_PIN, 0)  # Matikan bill acceptor
         print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}", end="")
         log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
@@ -126,11 +116,32 @@ def count_pulse(gpio, level, tick):
         # Jika saldo masih kurang, lanjutkan transaksi
         print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Menunggu uang tambahan...", end="")
         log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Menunggu uang tambahan.")
+        waiting_pulses = True  # Masih menunggu pulsa baru
+
+def count_pulse(gpio, level, tick):
+    global pulse_count, last_pulse_time, waiting_pulses
+
+    if not transaction_active:
+        return
+
+    current_time = time.time()
+
+    # Pastikan debounce
+    if (current_time - last_pulse_time) > DEBOUNCE_TIME:
+        pulse_count += 1
+        last_pulse_time = current_time
+        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging untuk melihat pulsa
+
+    waiting_pulses = True  # Masih ada pulsa yang masuk
+
+    # Tunggu pulsa selesai sebelum diproses
+    time.sleep(PULSE_TIMEOUT)
+    process_pulses()
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted
+    global transaction_active, remaining_balance, id_trx, total_inserted, waiting_pulses
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -143,6 +154,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
     
     transaction_active = True
+    waiting_pulses = True  # Tunggu pulsa pertama masuk
     total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
