@@ -160,7 +160,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
     
     transaction_active = True
-    cooldown_start = time.time()
+    cooldown_start = time.time() 
     total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
@@ -171,5 +171,4 @@ def trigger_transaction():
 if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    
     app.run(host="0.0.0.0", port=5000, debug=True)
