@@ -78,9 +78,6 @@ def count_pulse(gpio, level, tick):
 
     current_time = time.time()
 
-    # Debugging - Cek status pin dan level
-    print(f"GPIO {gpio} Level {level} at {current_time}")
-
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
@@ -111,8 +108,10 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Setelah total uang dihitung, baru proses pengurangan tagihan
+        # Cek apakah uang yang dimasukkan sudah cukup
         if total_inserted >= remaining_balance:
+            print(f"\r💳 Uang yang dimasukkan cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
+
             overpaid_amount = total_inserted - remaining_balance
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
