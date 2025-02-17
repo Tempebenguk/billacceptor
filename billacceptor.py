@@ -46,11 +46,11 @@ app = Flask(__name__)
 pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
-remaining_balance = 0  # 💰 SALDO YANG HARUS DIBAYAR
+remaining_balance = 0  
 id_trx = None
 cooldown_start = None
-total_inserted = 0  # 💰 TOTAL YANG SUDAH DIMASUKKAN
-pending_pulse = 0  # 💰 UANG BUFFER YANG DITERIMA TAPI BELUM DIKURANGI
+total_inserted = 0  
+pending_pulse = 0  
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -88,13 +88,13 @@ def count_pulse(gpio, level, tick):
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
             
-            # 💰 Simpan uang yang masuk di pending_pulse dulu
+            # 💰 Tambahkan ke buffer uang masuk
             pending_pulse += received_amount
             log_transaction(f"💰 Uang diterima: Rp.{received_amount}, total buffer: Rp.{pending_pulse}")
 
             pulse_count = 0  
 
-            cooldown_start = time.time()  # Reset timeout agar tidak timeout sebelum pulsa selesai masuk
+            cooldown_start = time.time()  
             
             # ✅ Langsung proses transaksi setelah uang masuk
             process_transaction()
@@ -116,7 +116,7 @@ def trigger_transaction():
     transaction_active = True
     cooldown_start = time.time()
     total_inserted = 0  
-    pending_pulse = 0  # Reset buffer uang masuk
+    pending_pulse = 0  
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     
     pi.write(EN_PIN, 1)
@@ -128,7 +128,6 @@ def process_transaction():
     if not transaction_active:
         return
 
-    # ✅ Ulangi sampai saldo lunas
     while transaction_active and pending_pulse > 0:
         log_transaction(f"🔄 Proses transaksi... Buffer: Rp.{pending_pulse}, Tagihan: Rp.{remaining_balance}")
 
