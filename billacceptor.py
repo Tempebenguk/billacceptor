@@ -27,7 +27,7 @@ PULSE_MAPPING = {
 }
 
 # 📌 Lokasi penyimpanan log
-LOG_DIR = "/home/pi/logs"
+LOG_DIR = "/var/www/html/billacceptor"
 LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 
 # 📌 Buat folder `logs/` jika belum ada
