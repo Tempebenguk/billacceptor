@@ -95,6 +95,9 @@ def count_pulse(gpio, level, tick):
             pulse_count = 0  
 
             cooldown_start = time.time()  # Reset timeout agar tidak timeout sebelum pulsa selesai masuk
+            
+            # ✅ Langsung proses transaksi setelah uang masuk
+            process_transaction()
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
@@ -125,15 +128,16 @@ def process_transaction():
     if not transaction_active:
         return
 
-    # ✅ Hanya eksekusi jika ada uang masuk
-    if pending_pulse > 0:
+    # ✅ Ulangi sampai saldo lunas
+    while transaction_active and pending_pulse > 0:
         log_transaction(f"🔄 Proses transaksi... Buffer: Rp.{pending_pulse}, Tagihan: Rp.{remaining_balance}")
 
-        total_inserted += pending_pulse
-        pending_balance = remaining_balance - pending_pulse  
+        received_amount = pending_pulse
+        total_inserted += received_amount
         pending_pulse = 0  
 
-        # ✅ Jika pending balance MINUS (kelebihan bayar)
+        pending_balance = remaining_balance - received_amount
+
         if pending_balance < 0:
             overpaid_amount = abs(pending_balance)
             remaining_balance = 0  
@@ -149,7 +153,6 @@ def process_transaction():
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-        # ✅ Jika pending balance PAS (Transaksi selesai tanpa lebih)
         elif pending_balance == 0:
             remaining_balance = 0  
             transaction_active = False
@@ -164,7 +167,6 @@ def process_transaction():
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
-        # ✅ Jika pending balance MASIH ADA (Menunggu uang tambahan)
         else:
             remaining_balance = pending_balance
             log_transaction(f"💳 Masih kurang Rp.{remaining_balance}. Menunggu uang tambahan...")
@@ -172,4 +174,3 @@ def process_transaction():
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
-
