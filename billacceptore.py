@@ -132,6 +132,7 @@ def count_pulse(gpio, level, tick):
 
         elif remaining_balance < 0:
             # Jika ada kelebihan bayar, selesai transaksi
+            overpaid_amount = total_inserted - remaining_balance
             remaining_balance = 0
             print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{abs(remaining_balance)}", end="")
             log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
