@@ -62,13 +62,11 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
 def closest_valid_pulse(pulses):
-    print(f"🔄 Mengecek pulsa terdekat untuk {pulses} pulsa...")  # Debugging
     if pulses == 1:
         return 1
     if 2 < pulses < 5:
         return 2
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
-    print(f"🔄 Pulsa terdekat yang dikoreksi: {closest_pulse}")  # Debugging
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
@@ -85,7 +83,7 @@ def count_pulse(gpio, level, tick):
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
 
-    # Jika pulsa tidak bertambah dalam batas waktu tertentu, lakukan koreksi pulsa
+    # Menggunakan perbedaan waktu untuk menentukan apakah pulsa telah berhenti
     if (current_time - last_pulse_time) > PULSE_TIMEOUT:
         print(f"⏰ Timeout tercapai, memeriksa pulsa...")  # Debugging
         corrected_pulses = closest_valid_pulse(pulse_count)
@@ -121,9 +119,8 @@ def count_pulse(gpio, level, tick):
                 total_inserted = 0  # Reset setelah transaksi selesai
                 remaining_balance = 0  # Reset saldo
             else:
-                print(f"⏳ Menunggu uang tambahan... (Remaining: Rp.{remaining_balance})")  # Debugging jika saldo masih kurang
+                print(f"⏳ Menunggu uang tambahan... (Remaining: Rp.{remaining_balance})")  # Debugging
                 pass
-
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
