@@ -94,13 +94,18 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
+        # Update remaining_balance setiap kali pulsa dihitung
+        remaining_balance -= received_amount
+        print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
+
         # Reset waktu cooldown setiap kali pulsa dihitung
         cooldown_start = current_time
 
     # Proses setelah cooldown selesai
-    if (current_time - cooldown_start) > TIMEOUT:
+    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
+        print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
+
         # Konversi pulsa ke uang setelah cooldown selesai
-        print(f"\r⏰ Cooldown selesai! Pulsa dihitung.")
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -110,19 +115,15 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Hitung total uang yang diterima sebelum mengurangi tagihan
-        total_received_amount = total_inserted
-        print(f"\r💳 Total uang yang diterima: Rp.{total_received_amount}")
-
-        # Setelah menghitung total uang yang diterima, kurangi saldo tagihan
-        remaining_balance -= total_received_amount
+        # Update remaining_balance setelah konversi
+        remaining_balance -= received_amount
         print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
 
         # Cek apakah uang yang dimasukkan sudah cukup
         if remaining_balance <= 0:
             print(f"\r💳 Uang yang dimasukkan cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
 
-            overpaid_amount = total_inserted - (remaining_balance + total_received_amount)
+            overpaid_amount = total_inserted - (remaining_balance + received_amount)
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
@@ -179,4 +180,4 @@ if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
