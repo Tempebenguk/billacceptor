@@ -55,6 +55,7 @@ last_transaction_time = time.time()
 cooldown = True
 total_amount = 0  # Akumulasi uang dalam sesi transaksi
 first_transaction_time = None  # Waktu transaksi pertama kali
+remaining_balance = 0  # Sisa tagihan untuk transaksi
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -68,13 +69,6 @@ pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 1)  # Awal: Aktifkan bill acceptor
-
-# 📌 Variabel transaksi global untuk Flask
-transaction_active = False
-remaining_balance = 0
-id_trx = None
-cooldown_start = None
-total_inserted = 0
 
 # 📌 Fungsi koreksi pulsa dengan toleransi ±2
 def closest_valid_pulse(pulses):
@@ -101,7 +95,7 @@ def closest_valid_pulse(pulses):
 # 📌 Callback untuk menangkap pulsa dari bill acceptor
 def count_pulse(gpio, level, tick):
     """ Callback untuk menangkap pulsa dari bill acceptor """
-    global pulse_count, last_pulse_time, last_transaction_time, cooldown, total_amount, first_transaction_time, total_inserted
+    global pulse_count, last_pulse_time, last_transaction_time, cooldown, total_amount, first_transaction_time, remaining_balance
 
     current_time = time.time()
     interval = current_time - last_pulse_time
@@ -119,50 +113,33 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
         last_transaction_time = current_time
 
-        log_transaction(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}, Total uang: Rp.{total_inserted}")
-        print(f"✅ Pulsa diterima! Interval: {round(interval, 3)} detik, Total pulsa: {pulse_count}, Total uang: Rp.{total_inserted}")
+        # Print status pengurangan tagihan dan uang yang diterima
+        print(f"✅ Pulsa diterima! Total pulsa: {pulse_count}, Total uang: Rp.{total_inserted}")
+        log_transaction(f"✅ Pulsa diterima! Total pulsa: {pulse_count}, Total uang: Rp.{total_inserted}")
 
-# 📌 Fungsi untuk memperbarui transaksi
-def update_transaction():
-    """ Fungsi untuk memperbarui transaksi, mengurangi tagihan dan mengatur cooldown """
-    global remaining_balance, total_inserted, cooldown, transaction_active
+        # Mengurangi tagihan dengan uang yang masuk
+        remaining_balance -= total_inserted
+        print(f"💰 Uang yang dimasukkan: Rp.{total_inserted}")
+        print(f"💸 Sisa tagihan: Rp.{remaining_balance}")
 
-    print(f"💰 Total uang yang dimasukkan: Rp.{total_inserted}")
-    print(f"💸 Sisa tagihan: Rp.{remaining_balance}")
-
-    remaining_balance -= total_inserted  # Kurangi tagihan dengan uang yang masuk
-    print(f"🔻 Sisa tagihan setelah pengurangan: Rp.{remaining_balance}")
-
-    if remaining_balance <= 0:
-        # Jika sisa tagihan sudah habis
-        transaction_active = False
-        cooldown = True
-        pi.write(EN_PIN, 0)  # Nonaktifkan bill acceptor
-        log_transaction(f"✅ Transaksi selesai! ID: {id_trx}, Total bayar: Rp.{total_inserted}")
-        print(f"✅ Transaksi selesai! ID: {id_trx}, Total bayar: Rp.{total_inserted}")
-        return "Transaksi selesai", 200
-
-    # Jika tagihan masih ada, mulai cooldown dan buka bill acceptor lagi
-    cooldown = True
-    pi.write(EN_PIN, 1)  # Aktifkan bill acceptor untuk menerima uang lebih lanjut
-    print("⏳ Cooldown dimulai, bill acceptor dibuka untuk menerima uang lebih lanjut.")
-    return jsonify({
-        "status": "pending",
-        "message": "Transaksi berlangsung",
-        "remaining_balance": remaining_balance,
-        "total_inserted": total_inserted
-    }), 200
+        if remaining_balance <= 0:
+            # Jika sisa tagihan sudah habis
+            print(f"✅ Transaksi selesai! Total bayar: Rp.{total_inserted}")
+            log_transaction(f"✅ Transaksi selesai! Total bayar: Rp.{total_inserted}")
+            pi.write(EN_PIN, 0)  # Nonaktifkan bill acceptor
+            cooldown = True  # Mulai cooldown setelah transaksi selesai
+        else:
+            # Jika sisa tagihan masih ada, print cooldown
+            print("⏳ Cooldown dimulai, bill acceptor dibuka untuk menerima uang lebih lanjut.")
+            pi.write(EN_PIN, 1)  # Aktifkan bill acceptor untuk menerima uang lebih lanjut
 
 # 📌 Flask app
 app = Flask(__name__)
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, cooldown_start, total_inserted
+    global remaining_balance, id_trx, cooldown, total_amount
 
-    if transaction_active:
-        return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
-    
     data = request.json
     remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
@@ -170,25 +147,24 @@ def trigger_transaction():
     if remaining_balance <= 0 or id_trx is None:
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
     
-    transaction_active = True
-    cooldown_start = time.time()
-    total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
+    print(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
-    print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
-    pi.write(EN_PIN, 1)  # Mengaktifkan bill acceptor untuk menerima uang
+    # Mengaktifkan bill acceptor untuk menerima uang
+    pi.write(EN_PIN, 1)
     
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 @app.route("/api/ba/status", methods=["GET"])
 def get_transaction_status():
     """ Endpoint untuk memantau status transaksi dan sisa tagihan """
-    global remaining_balance, total_inserted, transaction_active
-
-    if transaction_active:
-        return update_transaction()  # Panggil fungsi untuk memperbarui transaksi
+    if remaining_balance <= 0:
+        return jsonify({"status": "completed", "message": "Transaksi selesai"})
     else:
-        return jsonify({"status": "error", "message": "Tidak ada transaksi aktif"}), 400
+        return jsonify({
+            "status": "pending",
+            "remaining_balance": remaining_balance
+        }), 200
 
 if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
