@@ -111,7 +111,7 @@ def count_pulse(gpio, level, tick):
             # Kirim API bahwa transaksi sudah selesai
             try:
                 print("📡 Mengirim status transaksi ke server...")
-                response = requests.post("http://172.16.100.160:5000/api/receive",
+                response = requests.post("http://172.16.100.174:5000/api/receive",
                                          json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
                                          timeout=5)
                 print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
