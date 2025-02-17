@@ -89,10 +89,15 @@ def count_pulse(gpio, level, tick):
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
             if received_amount > 0:
-                total_inserted += received_amount
-                print(f"💰 Total uang masuk: Rp.{total_inserted}")
-                log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
-                pulse_count = 0  # Reset counter setelah dikonversi
+                if total_inserted == received_amount:
+                    print(f"💰 Total uang masuk: Rp.{total_inserted}")
+                    log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+                    pulse_count = 0 
+                
+                elif total_inserted > received_amount:
+                    print(f"💰 Total uang masuk: Rp.{total_inserted}")
+                    log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+                    pulse_count = 0 
 
         # Jika total uang yang masuk sudah mencukupi atau lebih dari tagihan
         if total_inserted == remaining_balance:
