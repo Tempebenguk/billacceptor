@@ -102,16 +102,15 @@ def count_pulse(gpio, level, tick):
         # Reset waktu cooldown setiap kali pulsa dihitung
         cooldown_start = current_time
 
-        # Hitung sisa waktu cooldown
-        cooldown_remaining = TIMEOUT - (current_time - cooldown_start)
-        if cooldown_remaining > 0:
-            print(f"\r⏳ Waktu cooldown tersisa: {int(cooldown_remaining)} detik", end="")
-
-        else:
-            print("\r⏳ Cooldown selesai!", end="")
+    # Hitung sisa waktu cooldown
+    cooldown_remaining = TIMEOUT - (current_time - cooldown_start)
+    if cooldown_remaining > 0:
+        print(f"\r⏳ Waktu cooldown tersisa: {int(cooldown_remaining)} detik", end="")
+    else:
+        print("\r⏳ Cooldown selesai!", end="")
 
     # Proses setelah cooldown selesai
-    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
+    if (current_time - cooldown_start) > TIMEOUT:
         print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
 
         # Konversi pulsa ke uang setelah cooldown selesai
