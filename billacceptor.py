@@ -140,6 +140,10 @@ app = Flask(__name__)
 def trigger_transaction():
     global remaining_balance, id_trx, cooldown, total_amount
 
+    # Reset remaining_balance sebelum memulai transaksi baru
+    remaining_balance = 0
+    print(f"🔄 Reset remaining_balance ke 0")
+
     data = request.json
     remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
@@ -154,17 +158,6 @@ def trigger_transaction():
     pi.write(EN_PIN, 1)
     
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
-
-@app.route("/api/ba/status", methods=["GET"])
-def get_transaction_status():
-    """ Endpoint untuk memantau status transaksi dan sisa tagihan """
-    if remaining_balance <= 0:
-        return jsonify({"status": "completed", "message": "Transaksi selesai"})
-    else:
-        return jsonify({
-            "status": "pending",
-            "remaining_balance": remaining_balance
-        }), 200
 
 if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
