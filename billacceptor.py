@@ -40,7 +40,7 @@ def log_transaction(message):
     print(f"{timestamp} {message}")
 
 # 📌 Inisialisasi Flask
-app = Flask(__name__)
+app = Flask(_name_)
 
 # 📌 Variabel Global
 pulse_count = 0
@@ -98,9 +98,31 @@ def count_pulse(gpio, level, tick):
         remaining_balance -= received_amount
         print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
 
-        # Cek apakah saldo sudah cukup atau berlebih
+        # Reset waktu cooldown setiap kali pulsa dihitung
+        cooldown_start = current_time
+
+    # Proses setelah cooldown selesai
+    if (current_time - cooldown_start) > TIMEOUT and pulse_count > 0:
+        print(f"\r⏰ Cooldown selesai! Total pulsa diterima: {pulse_count}", end="")
+
+        # Konversi pulsa ke uang setelah cooldown selesai
+        corrected_pulses = closest_valid_pulse(pulse_count)
+        if corrected_pulses:
+            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+            total_inserted += received_amount
+            print(f"\r🔄 Perhitungan pulsa: {pulse_count} pulsa dikonversi menjadi Rp.{received_amount}", end="")  # Debugging
+            print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
+            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+            pulse_count = 0  # Reset pulse count setelah konversi
+
+        # Update remaining_balance setelah konversi
+        remaining_balance -= received_amount
+        print(f"\r💳 Saldo yang tersisa: Rp.{remaining_balance}", end="")
+
+        # Cek apakah uang yang dimasukkan sudah cukup
         if remaining_balance <= 0:
-            # Jika saldo sudah cukup atau lebih
+            print(f"\r💳 Uang yang dimasukkan cukup. Total uang: Rp.{total_inserted}, Tagihan: Rp.{remaining_balance}")
+
             overpaid_amount = total_inserted - (remaining_balance + received_amount)
             remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
             transaction_active = False  # Tandai transaksi selesai
@@ -119,9 +141,9 @@ def count_pulse(gpio, level, tick):
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
-
+        
+        # Jika uang yang dimasukkan belum cukup
         elif remaining_balance > 0:
-            # Jika saldo masih kurang, lanjutkan transaksi
             print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Cooldown dimulai.", end="")
             log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Transaksi dilanjutkan.")
             pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
@@ -129,14 +151,6 @@ def count_pulse(gpio, level, tick):
 
             # Set cooldown agar menunggu uang selanjutnya
             cooldown_start = time.time()
-
-        elif remaining_balance < 0:
-            # Jika ada kelebihan bayar, selesai transaksi
-            remaining_balance = 0
-            print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{abs(remaining_balance)}", end="")
-            log_transaction(f"💳 Kelebihan bayar: Rp.{abs(remaining_balance)}. Transaksi selesai.")
-            transaction_active = False
-            pi.write(EN_PIN, 0)  # Matikan bill acceptor
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
@@ -162,7 +176,7 @@ def trigger_transaction():
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     
