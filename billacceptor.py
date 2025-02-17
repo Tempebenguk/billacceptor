@@ -71,7 +71,7 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, cooldown_start
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, cooldown_start, remaining_balance
 
     if not transaction_active:
         return
@@ -124,7 +124,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = data.get("total", 0)
+    remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
