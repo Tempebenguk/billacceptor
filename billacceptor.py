@@ -49,8 +49,9 @@ last_pulse_time = time.time()
 transaction_active = False
 remaining_balance = 0
 id_trx = None
+total_pulses = 0  # Total pulsa yang masuk
 total_inserted = 0  # Total uang yang dimasukkan
-waiting_pulses = False  # Untuk memastikan pulsa dihitung semua sebelum diproses
+waiting_pulses = False  # Menunggu pulsa selesai sebelum dikonversi
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -72,21 +73,22 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def process_pulses():
-    global pulse_count, total_inserted, remaining_balance, transaction_active, id_trx, waiting_pulses
+    global total_pulses, total_inserted, remaining_balance, transaction_active, id_trx, waiting_pulses
 
-    if pulse_count == 0:
+    if total_pulses == 0:
         return  # Tidak ada pulsa baru, tidak perlu proses
 
-    corrected_pulses = closest_valid_pulse(pulse_count)
+    # Koreksi total pulsa
+    corrected_pulses = closest_valid_pulse(total_pulses)
     if corrected_pulses:
         received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-        print(f"\r🔄 Total pulsa terdeteksi: {pulse_count} -> Koreksi: {corrected_pulses}, Konversi: Rp.{received_amount}", end="")
+        print(f"\r🔄 Total pulsa terdeteksi: {total_pulses} -> Koreksi: {corrected_pulses}, Konversi: Rp.{received_amount}", end="")
         total_inserted += received_amount
         log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
 
-    pulse_count = 0  # Reset setelah konversi
+    total_pulses = 0  # Reset setelah konversi
 
-    # Hitung saldo setelah konversi ke uang
+    # Baru setelah konversi, hitung saldo
     remaining_balance -= received_amount
     print(f"\r💳 Saldo setelah pembayaran: Rp.{remaining_balance}", end="")
 
@@ -113,13 +115,12 @@ def process_pulses():
             print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
     elif remaining_balance > 0:
-        # Jika saldo masih kurang, lanjutkan transaksi
         print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Menunggu uang tambahan...", end="")
         log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Menunggu uang tambahan.")
         waiting_pulses = True  # Masih menunggu pulsa baru
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, waiting_pulses
+    global total_pulses, last_pulse_time, waiting_pulses
 
     if not transaction_active:
         return
@@ -128,9 +129,9 @@ def count_pulse(gpio, level, tick):
 
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
-        pulse_count += 1
+        total_pulses += 1
         last_pulse_time = current_time
-        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging untuk melihat pulsa
+        print(f"🔢 Pulsa diterima: {total_pulses}")  # Debugging untuk melihat pulsa
 
     waiting_pulses = True  # Masih ada pulsa yang masuk
 
@@ -141,7 +142,7 @@ def count_pulse(gpio, level, tick):
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted, waiting_pulses
+    global transaction_active, remaining_balance, id_trx, total_inserted, total_pulses, waiting_pulses
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -156,6 +157,7 @@ def trigger_transaction():
     transaction_active = True
     waiting_pulses = True  # Tunggu pulsa pertama masuk
     total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
+    total_pulses = 0  # Reset total pulsa
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
@@ -163,7 +165,5 @@ def trigger_transaction():
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
-    # Pasang callback untuk pin BILL_ACCEPTOR_PIN
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    
     app.run(host="0.0.0.0", port=5000, debug=True)
