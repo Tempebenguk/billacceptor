@@ -80,10 +80,10 @@ def count_pulse(gpio, level, tick):
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
-        last_pulse_time = current_time
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
+        last_pulse_time = current_time  # Update waktu terakhir pulsa
 
-    # Cek apakah sudah mencapai jeda antar pulsa (PULSE_TIMEOUT)
+    # Jika pulsa tidak bertambah dalam batas waktu tertentu, lakukan koreksi pulsa
     if (current_time - last_pulse_time) > PULSE_TIMEOUT:
         corrected_pulses = closest_valid_pulse(pulse_count)
         
@@ -97,7 +97,7 @@ def count_pulse(gpio, level, tick):
             pulse_count = 0
 
             # Mengurangi saldo hanya setelah konversi selesai
-            remaining_balance -= total_inserted
+            remaining_balance -= received_amount
             log_transaction(f"💳 Sisa tagihan: Rp.{remaining_balance}")
 
             if remaining_balance <= 0:
@@ -143,18 +143,6 @@ def trigger_transaction():
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
-# # Fungsi timeout transaksi (Dikomentari sesuai permintaan)
-# def transaction_timeout():
-#     global transaction_active, remaining_balance, total_inserted
-#     while True:
-#         if transaction_active and time.time() - cooldown_start > TIMEOUT:
-#             log_transaction(f"⏳ Transaksi timeout! Uang masuk: Rp.{total_inserted}, Sisa tagihan: Rp.{remaining_balance}")
-#             transaction_active = False
-#             pi.write(EN_PIN, 0)
-#         time.sleep(1)
-
 if __name__ == "__main__":
-    # import threading
-    # threading.Thread(target=transaction_timeout, daemon=True).start()  # Komentar fungsi timeout
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
