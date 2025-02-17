@@ -61,8 +61,8 @@ pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
-# ✅ Tambahkan Glitch Filter untuk menghindari pulsa noise
-pi.set_glitch_filter(BILL_ACCEPTOR_PIN, 1000)  # 1000 µs = 1ms debounce
+# 📌 Tambahkan glitch filter untuk debounce
+i.set_glitch_filter(BILL_ACCEPTOR_PIN, 2000)  # 1ms debounce
 
 def closest_valid_pulse(pulses):
     if pulses == 1:
@@ -80,8 +80,8 @@ def count_pulse(gpio, level, tick):
 
     current_time = time.time()
     pulse_gap = current_time - last_pulse_time  # Hitung selisih waktu antar pulsa
-
-    # Log waktu antara pulsa untuk debugging
+    
+    # Debugging waktu antar pulsa
     log_transaction(f"⚡ Pulse detected! Tick: {tick}, Time diff: {pulse_gap}")
 
     # Pastikan debounce
@@ -89,10 +89,10 @@ def count_pulse(gpio, level, tick):
         pulse_count += 1
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
-
-    # Jika pulsa berhenti, lakukan konversi ke uang
-    if pulse_count > 0 and (current_time - last_pulse_time) > PULSE_TIMEOUT:
-        log_transaction(f"⏰ Pulsa berhenti, memeriksa pulsa...")
+    
+    # Menggunakan perbedaan waktu untuk menentukan apakah pulsa telah berhenti
+    if pulse_gap > PULSE_TIMEOUT:
+        log_transaction(f"⏰ Timeout tercapai, memeriksa pulsa...")  # Debugging
         corrected_pulses = closest_valid_pulse(pulse_count)
         
         if corrected_pulses:
@@ -101,10 +101,7 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Pulsa valid: {pulse_count}, dikonversi menjadi Rp.{received_amount}")
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
 
-            # Reset pulse count setelah konversi
-            pulse_count = 0
-
-            # Mengurangi saldo hanya setelah konversi selesai
+            pulse_count = 0  # Reset count setelah konversi
             remaining_balance -= received_amount
             log_transaction(f"💳 Saldo yang tersisa: Rp.{remaining_balance}")
 
@@ -112,9 +109,7 @@ def count_pulse(gpio, level, tick):
                 overpaid_amount = max(0, total_inserted - (remaining_balance + received_amount))
                 transaction_active = False
                 pi.write(EN_PIN, 0)  # Matikan bill acceptor
-
                 log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
-
                 try:
                     response = requests.post("http://172.16.100.160:5000/api/receive",
                                              json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
@@ -122,7 +117,6 @@ def count_pulse(gpio, level, tick):
                     log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
                 except requests.exceptions.RequestException as e:
                     log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-
                 total_inserted = 0  # Reset setelah transaksi selesai
                 remaining_balance = 0  # Reset saldo
             else:
@@ -137,7 +131,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
+    remaining_balance = int(data.get("total", 0))
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
