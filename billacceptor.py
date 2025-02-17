@@ -100,7 +100,7 @@ def count_pulse(gpio, level, tick):
         log_transaction(f"✅ Transaksi {id_trx} selesai. Uang pas.")
 
         try:
-            response = requests.post("http://172.16.100.160:5000/api/receive",
+            response = requests.post("http://174.16.100.160:5000/api/receive",
                                      json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": 0},
                                      timeout=5)
             log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
@@ -116,7 +116,7 @@ def count_pulse(gpio, level, tick):
         log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan bayar Rp.{overpaid_amount}")
 
         try:
-            response = requests.post("http://172.16.100.160:5000/api/receive",
+            response = requests.post("http://174.16.100.160:5000/api/receive",
                                      json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
                                      timeout=5)
             log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
