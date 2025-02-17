@@ -171,8 +171,5 @@ def process_transaction():
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-
-    while True:
-        process_transaction()
-        time.sleep(0.1)
+    app.run(host="0.0.0.0", port=5000, debug=True)
 
