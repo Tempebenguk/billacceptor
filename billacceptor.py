@@ -108,12 +108,13 @@ def count_pulse(gpio, level, tick):
             try:
                 print("📡 Mengirim status transaksi ke server...")
                 response = requests.post("http://172.16.100.160:5000/api/receive",
-                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
-                                         timeout=5)
+                                        json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
+                                        timeout=5)
                 print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
                 print(f"⚠️ Gagal mengirim status transaksi: {e}")
+
 
 pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
