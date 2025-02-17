@@ -5,18 +5,17 @@ import os
 import requests
 from flask import Flask, request, jsonify
 
-# 📌 Konfigurasi PIN GPIO
+# Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
 
-# 📌 Konfigurasi transaksi
-TIMEOUT = 15  # Waktu maksimum transaksi sebelum cooldown (detik)
-PULSE_TIMEOUT = 0.3  # Batas waktu antara pulsa (detik)
-DEBOUNCE_TIME = 0.05  # 50ms debounce
-MIN_PULSE_INTERVAL = 0.04  # 40ms batas waktu pulsa minimal
-TOLERANCE = 2  # Toleransi ±2 pulsa
+# Konfigurasi transaksi
+TIMEOUT = 15
+PULSE_TIMEOUT = 0.3
+DEBOUNCE_TIME = 0.05
+TOLERANCE = 2
+MIN_PULSE_INTERVAL = 0.04  # 40ms
 
-# 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
     1: 1000,
     2: 2000,
@@ -27,13 +26,39 @@ PULSE_MAPPING = {
     100: 100000
 }
 
-# 📌 Variabel Global
+LOG_DIR = "/var/www/html/logs"
+LOG_FILE = os.path.join(LOG_DIR, "log.txt")
+
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+def log_transaction(message):
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    with open(LOG_FILE, "a") as log:
+        log.write(f"{timestamp} {message}\n")
+    print(f"{timestamp} {message}")
+
+app = Flask(__name__)
+
+# Variabel Global
 pulse_count = 0
-last_pulse_time = 0
+last_pulse_time = time.time()
 transaction_active = False
 remaining_balance = 0
 id_trx = None
+total_inserted = 0
 cooldown_start = None
+
+# Inisialisasi pigpio
+pi = pigpio.pi()
+if not pi.connected:
+    log_transaction("Gagal terhubung ke pigpio daemon!")
+    exit()
+
+pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
+pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
+pi.set_mode(EN_PIN, pigpio.OUTPUT)
+pi.write(EN_PIN, 0)
 
 def closest_valid_pulse(pulses):
     if pulses == 1:
@@ -44,42 +69,44 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active
-
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start
+    
     if not transaction_active:
         return
 
     current_time = time.time()
-    if (current_time - last_pulse_time) >= MIN_PULSE_INTERVAL:  # Cek interval pulsa
-        pulse_count += 1
-        last_pulse_time = current_time
-        print(f"🔢 Pulsa diterima: {pulse_count}")
+    if (current_time - last_pulse_time) < MIN_PULSE_INTERVAL:
+        return
 
-def process_payment():
-    global pulse_count, remaining_balance, transaction_active
+    pulse_count += 1
+    last_pulse_time = current_time
     
-    while transaction_active:
-        time.sleep(PULSE_TIMEOUT)
+    corrected_pulses = closest_valid_pulse(pulse_count)
+    if corrected_pulses:
+        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+        total_inserted += received_amount
+        pulse_count = 0
+        remaining_balance -= received_amount
+        log_transaction(f"Total uang masuk: Rp.{total_inserted}, Saldo tersisa: Rp.{remaining_balance}")
         
-        if pulse_count > 0:
-            corrected_pulses = closest_valid_pulse(pulse_count)
-            if corrected_pulses:
-                received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-                print(f"💰 Total uang masuk: Rp.{received_amount}")
-                remaining_balance -= received_amount
-                pulse_count = 0  # Reset pulsa setelah dihitung
-            
-            if remaining_balance <= 0:
-                print("✅ Transaksi selesai!")
-                transaction_active = False
-                break
-
-# Inisialisasi Flask
-app = Flask(__name__)
+        if remaining_balance <= 0:
+            transaction_active = False
+            pi.write(EN_PIN, 0)
+            overpaid_amount = abs(remaining_balance)
+            log_transaction(f"Transaksi selesai! Kelebihan: Rp.{overpaid_amount}")
+            try:
+                response = requests.post("http://172.16.100.160:5000/api/receive", 
+                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount}, 
+                                         timeout=5)
+                log_transaction(f"POST sukses: {response.status_code}, Response: {response.text}")
+            except requests.exceptions.RequestException as e:
+                log_transaction(f"Gagal mengirim status transaksi: {e}")
+        else:
+            cooldown_start = time.time()
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, pulse_count
+    global transaction_active, remaining_balance, id_trx, cooldown_start, total_inserted
     
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -92,22 +119,12 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
     
     transaction_active = True
-    pulse_count = 0
-    
-    print(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
+    cooldown_start = time.time()
+    total_inserted = 0
+    log_transaction(f"Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
+    pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
-    pi = pigpio.pi()
-    if not pi.connected:
-        print("⚠️ Gagal terhubung ke pigpio daemon!")
-        exit()
-    
-    pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
-    pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
-    pi.set_mode(EN_PIN, pigpio.OUTPUT)
-    pi.write(EN_PIN, 0)
-    
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    
     app.run(host="0.0.0.0", port=5000, debug=True)
