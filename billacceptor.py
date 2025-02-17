@@ -82,7 +82,7 @@ def count_pulse(gpio, level, tick):
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
-        log_transaction(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
+        log_transaction(f"🔢 Pulsa diterima: {pulse_count}")
         last_pulse_time = current_time  # Update waktu terakhir pulsa
 
     # Jika pulsa tidak bertambah dalam batas waktu tertentu, lakukan koreksi pulsa
@@ -121,9 +121,9 @@ def count_pulse(gpio, level, tick):
                 total_inserted = 0  # Reset setelah transaksi selesai
                 remaining_balance = 0  # Reset saldo
             else:
-                print("⏳ Menunggu uang tambahan...")  # Debugging jika saldo masih kurang
-                # Tidak ada aksi, hanya menunggu uang tambahan
+                print(f"⏳ Menunggu uang tambahan... (Remaining: Rp.{remaining_balance})")  # Debugging jika saldo masih kurang
                 pass
+
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
