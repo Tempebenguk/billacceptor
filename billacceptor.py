@@ -65,6 +65,7 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
 def closest_valid_pulse(pulses):
+    """Mengoreksi jumlah pulsa ke nilai terdekat yang valid."""
     if pulses == 1:
         return 1
     if 2 < pulses < 5:
@@ -72,33 +73,50 @@ def closest_valid_pulse(pulses):
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
-def process_pulses():
-    global total_pulses, total_inserted, remaining_balance, transaction_active, id_trx, waiting_pulses
+def process_pulse_addition():
+    """Menangani akumulasi pulsa dan koreksi pulsa."""
+    global total_pulses
 
     if total_pulses == 0:
         return  # Tidak ada pulsa baru, tidak perlu proses
 
-    # Koreksi total pulsa
     corrected_pulses = closest_valid_pulse(total_pulses)
     if corrected_pulses:
-        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-        print(f"\r🔄 Total pulsa terdeteksi: {total_pulses} -> Koreksi: {corrected_pulses}, Konversi: Rp.{received_amount}", end="")
-        total_inserted += received_amount
-        log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
+        print(f"\r🔄 Total pulsa terdeteksi: {total_pulses} -> Koreksi: {corrected_pulses}", end="")
+        log_transaction(f"🔢 Pulsa terkoreksi: {corrected_pulses}")
+    else:
+        print("\r⚠️ Pulsa tidak valid!", end="")
+        log_transaction("⚠️ Pulsa tidak valid, transaksi gagal.")
+    
+    return corrected_pulses
 
-    total_pulses = 0  # Reset setelah konversi
+def convert_pulses_to_money(corrected_pulses):
+    """Mengubah jumlah pulsa menjadi nominal uang."""
+    global total_inserted
+
+    if corrected_pulses is None:
+        return 0  # Tidak ada pulsa valid
+
+    received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+    total_inserted += received_amount
+    print(f"\r💰 Konversi pulsa ke uang: Rp.{received_amount}", end="")
+    log_transaction(f"💰 Uang masuk: Rp.{received_amount}, Total: Rp.{total_inserted}")
+    
+    return received_amount
+
+def deduct_from_balance(received_amount):
+    """Mengurangi tagihan dari total uang yang masuk."""
+    global remaining_balance, transaction_active, waiting_pulses, id_trx
 
     # 🕒 Tambahkan delay sebelum saldo dikurangi
     time.sleep(1)  # Delay 1 detik sebelum mengurangi tagihan
 
-    # Baru setelah delay, hitung saldo
     remaining_balance -= received_amount
     print(f"\r💳 Saldo setelah pembayaran: Rp.{remaining_balance}", end="")
 
-    # Cek status transaksi
     if remaining_balance <= 0:
         overpaid_amount = abs(remaining_balance)  # Kelebihan bayar
-        remaining_balance = 0  # Pastikan saldo 0 setelah transaksi selesai
+        remaining_balance = 0
         transaction_active = False
         waiting_pulses = False
         pi.write(EN_PIN, 0)  # Matikan bill acceptor
@@ -116,13 +134,13 @@ def process_pulses():
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
             print(f"⚠️ Gagal mengirim status transaksi: {e}")
-
-    elif remaining_balance > 0:
+    else:
         print(f"\r💳 Saldo sisa: Rp.{remaining_balance}, Menunggu uang tambahan...", end="")
         log_transaction(f"💳 Saldo sisa: Rp.{remaining_balance}. Menunggu uang tambahan.")
         waiting_pulses = True  # Masih menunggu pulsa baru
 
 def count_pulse(gpio, level, tick):
+    """Handler untuk mendeteksi pulsa dari bill acceptor."""
     global total_pulses, last_pulse_time, waiting_pulses
 
     if not transaction_active:
@@ -136,11 +154,13 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
         print(f"🔢 Pulsa diterima: {total_pulses}")  # Debugging untuk melihat pulsa
 
-    waiting_pulses = True  # Masih ada pulsa yang masuk
+    waiting_pulses = True
 
     # Tunggu pulsa selesai sebelum diproses
     time.sleep(PULSE_TIMEOUT)
-    process_pulses()
+    corrected_pulses = process_pulse_addition()
+    received_amount = convert_pulses_to_money(corrected_pulses)
+    deduct_from_balance(received_amount)
 
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
@@ -151,18 +171,17 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
     
     data = request.json
-    remaining_balance = int(data.get("total", 0))  # Pastikan remaining_balance berupa integer
+    remaining_balance = int(data.get("total", 0))
     id_trx = data.get("id_trx")
     
     if remaining_balance <= 0 or id_trx is None:
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
     
     transaction_active = True
-    waiting_pulses = True  # Tunggu pulsa pertama masuk
-    total_inserted = 0  # Reset total uang yang masuk untuk transaksi baru
-    total_pulses = 0  # Reset total pulsa
+    waiting_pulses = True
+    total_inserted = 0
+    total_pulses = 0
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
-    print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
