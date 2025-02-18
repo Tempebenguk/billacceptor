@@ -12,7 +12,6 @@ EN_PIN = 15             # Pin enable untuk mengaktifkan bill acceptor
 
 # 📌 Konfigurasi transaksi
 TIMEOUT = 15  # Waktu maksimum transaksi sebelum cooldown (detik)
-PULSE_TIMEOUT = 0.3  # Batas waktu antara pulsa untuk menentukan akhir transaksi (detik)
 DEBOUNCE_TIME = 0.05  # 50ms debounce
 TOLERANCE = 2  # Toleransi ±2 pulsa
 
@@ -80,7 +79,7 @@ def count_pulse(gpio, level, tick):
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        last_pulse_received_time = current_time  # **Pastikan cooldown reset setiap pulsa masuk**
+        last_pulse_received_time = current_time  # **Cooldown reset setiap pulsa masuk**
         print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
 
         # Konversi pulsa ke uang
@@ -92,10 +91,6 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Cek apakah pembayaran sudah mencukupi
-        if total_inserted >= remaining_balance:
-            print("\r⏳ Menunggu pulsa lebih lanjut sebelum menghitung...", end="")
-
 # **Cooldown Timer Logic**
 def start_timeout_timer():
     """Mengatur timer untuk mendeteksi timeout transaksi."""
@@ -103,15 +98,18 @@ def start_timeout_timer():
 
     while transaction_active:
         current_time = time.time()
-        if current_time - last_pulse_received_time >= TIMEOUT:
+        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # **Integer timeout**
+        
+        if remaining_time == 0:
             # Timeout tercapai, matikan bill acceptor
             pi.write(EN_PIN, 0)
             transaction_active = False
+            
             if total_inserted < remaining_balance:
                 deficit = remaining_balance - total_inserted
                 print(f"\r⏰ Timeout! Kurang: Rp.{deficit}")
-                log_transaction(f"⚠️ Transaksi timeout, kurang: Rp.{deficit}")
-                send_transaction_status("failed", total_inserted, deficit)
+                log_transaction(f"⚠️ Transaksi gagal, kurang: Rp.{deficit}")
+                send_transaction_status("failed", total_inserted, deficit)  # **Kirim sebagai "failed" jika uang kurang**
             elif total_inserted == remaining_balance:
                 print(f"\r✅ Transaksi berhasil, total: Rp.{total_inserted}")
                 log_transaction(f"✅ Transaksi berhasil, total: Rp.{total_inserted}")
@@ -121,10 +119,8 @@ def start_timeout_timer():
                 print(f"\r✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
                 log_transaction(f"✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
                 send_transaction_status("overpaid", total_inserted, overpaid)
-        else:
-            # Menampilkan waktu cooldown yang tersisa
-            remaining_time = TIMEOUT - (current_time - last_pulse_received_time)
-            print(f"\r⏳ Timeout dalam {remaining_time:.1f} detik...", end="")
+        
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")  # **Tampilkan sebagai integer**
         time.sleep(1)
 
 # Fungsi untuk mengirim status transaksi
