@@ -108,30 +108,28 @@ def count_pulse(gpio, level, tick):
             # Kirim API bahwa transaksi sudah selesai
             try:
                 print("📡 Mengirim status transaksi ke server...")
-                response = requests.post("http://172.16.100.165:5000/api/receive",
+                response = requests.post("http://172.16.100.174:5000/api/receive",
                                          json={"id_trx": id_trx, "status": "success", "total_inserted": corrected_pulses*1000},
                                          timeout=5)
                 print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
                 log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
             except requests.exceptions.RequestException as e:
                 log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-                print(f"⚠️ Gagal mengirim status transaksi: {e}")                
-        
+                print(f"⚠️ Gagal mengirim status transaksi: {e}")
+
         elif remaining_balance > corrected_pulses:
         # Jika saldo masih kurang, lanjutkan transaksi
-            remaining_balance = remaining_balance-corrected_pulses
-            print(f"\r💳 Tagihan sisa: Rp.{remaining_balance*1000}.")
-            log_transaction(f"💳 Tagihan sisa: Rp.{remaining_balance*1000}. Masukkan sisanya.")
-            #count_pulse
-            
+            print(f"\r💳 Tagihan sisa: Rp.{(remaining_balance-corrected_pulses*1000)}.")
+            log_transaction(f"💳 Tagihan sisa: Rp.{remaining_balance-corrected_pulses*1000}. Masukkan sisanya.")
+            pulse_count = 0  # Reset pulse count untuk transaksi berikutnya
         #    total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
 
             # Set cooldown agar menunggu uang selanjutnya
         #    cooldown_start = time.time()
 
-        elif remaining_balance < corrected_pulses :
+        elif remaining_balance < corrected_pulses:
         #Jika ada kelebihan bayar, selesai transaksi
-            corrected_pulses = corrected_pulses - remaining_balance
+            corrected_pulses -= remaining_balance
             print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{corrected_pulses*1000}", end="")
             log_transaction(f"💳 Kelebihan bayar: Rp.{corrected_pulses*1000}. Transaksi selesai.")
             transaction_active = False
