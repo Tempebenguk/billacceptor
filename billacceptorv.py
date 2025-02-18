@@ -50,7 +50,7 @@ remaining_balance = 0
 id_trx = None
 cooldown_start = None
 total_inserted = 0  # Total uang yang dimasukkan
-kondisi = ya
+kondisi = "ya"
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
