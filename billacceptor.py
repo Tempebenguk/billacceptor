@@ -55,7 +55,7 @@ first_evaluation_done = False  # Untuk menandai apakah evaluasi pertama sudah di
 
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status, timeout_timer, first_evaluation_done
+    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status, timeout_timer, first_evaluation_done, remaining_due
 
     if not transaction_active:
         return
@@ -71,6 +71,9 @@ def count_pulse(gpio, level, tick):
             total_inserted += received_amount
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  
+
+        # Perbarui remaining_due
+        remaining_due = max(0, remaining_balance - total_inserted)
 
         if first_evaluation_done:
             # Jika evaluasi pertama sudah dilakukan dan uang masih kurang, reset timeout
@@ -91,12 +94,7 @@ def delayed_transaction_check():
         first_evaluation_done = True  # Menandai bahwa evaluasi pertama selesai
         reset_timeout()  # Mulai timer timeout
     else:
-        status = "success" if total_inserted == remaining_balance else "overpaid"
-        overpaid = max(0, total_inserted - remaining_balance)
-        log_transaction(f"✅ Transaksi {status}, total: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}")
-        send_transaction_status(status, total_inserted, overpaid, 0)
-        transaction_active = False
-        pi.write(EN_PIN, 0)
+        process_final_transaction()
 
     sent_status = False
 
@@ -107,17 +105,23 @@ def reset_timeout():
     if timeout_timer:
         timeout_timer.cancel()  # Batalkan timer lama jika ada
 
-    timeout_timer = threading.Timer(TIMEOUT, force_timeout)
+    timeout_timer = threading.Timer(TIMEOUT, process_final_transaction)
     timeout_timer.start()
 
 
-def force_timeout():
-    global transaction_active, remaining_due
+def process_final_transaction():
+    global transaction_active, remaining_due, total_inserted
+
     if transaction_active:
         transaction_active = False
         pi.write(EN_PIN, 0)
-        log_transaction(f"⚠️ Timeout! Kurang: Rp.{remaining_due}")
-        send_transaction_status("failed", total_inserted, 0, remaining_due)
+
+        overpaid = max(0, total_inserted - remaining_balance)
+        remaining_due = 0 if total_inserted >= remaining_balance else remaining_balance - total_inserted
+
+        status = "success" if remaining_due == 0 else "failed"
+        log_transaction(f"✅ Transaksi {status}, total: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}, Sisa tagihan: Rp.{remaining_due}")
+        send_transaction_status(status, total_inserted, overpaid, remaining_due)
 
 
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
@@ -141,7 +145,7 @@ def closest_valid_pulse(pulses):
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status, timeout_timer, first_evaluation_done
+    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status, timeout_timer, first_evaluation_done, remaining_due
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -157,6 +161,8 @@ def trigger_transaction():
     total_inserted = 0
     sent_status = False
     first_evaluation_done = False  # Reset evaluasi pertama
+    remaining_due = remaining_balance  # Reset nilai remaining_due
+
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     pi.write(EN_PIN, 1)
 
