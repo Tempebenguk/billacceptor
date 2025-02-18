@@ -137,6 +137,7 @@ def start_timeout_timer():
                     send_transaction_status("overpaid", total_inserted, overpaid, 0)  # Transaksi sukses, tapi kelebihan uang
                 transaction_active = False
                 break
+            pi.write(EN_PIN, 1)
 
 # Fungsi untuk mengirim status transaksi
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
