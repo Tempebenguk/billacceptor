@@ -45,6 +45,7 @@ app = Flask(__name__)
 # 📌 Variabel Global
 pulse_count = 0
 last_pulse_time = time.time()
+last_processed_pulse_time = time.time()
 transaction_active = False
 remaining_balance = 0
 id_trx = None
@@ -71,7 +72,7 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start, id_trx
+    global pulse_count, last_pulse_time, last_processed_pulse_time, transaction_active, total_inserted, remaining_balance, cooldown_start, id_trx
 
     if not transaction_active:
         return
@@ -81,11 +82,12 @@ def count_pulse(gpio, level, tick):
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
-        last_pulse_time = current_time
+        last_pulse_time = current_time  # Update waktu pulsa diterima
         log_transaction(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
 
     # Jika tidak ada pulsa baru dalam batas waktu, lakukan konversi
-    if (current_time - last_pulse_time) > PULSE_TIMEOUT and pulse_count > 0:
+    if (current_time - last_processed_pulse_time) > PULSE_TIMEOUT and pulse_count > 0:
+        last_processed_pulse_time = current_time  # Update waktu terakhir konversi
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
