@@ -6,17 +6,17 @@ import requests
 from flask import Flask, request, jsonify
 import threading
 
-# 📌 Konfigurasi PIN GPIO
+# Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15  
 
-# 📌 Konfigurasi transaksi
+# Konfigurasi transaksi
 TIMEOUT = 15  
 DEBOUNCE_TIME = 0.05  
 TOLERANCE = 2  
-PULSE_WAIT_TIME = 10  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
+PULSE_WAIT_TIME = 3  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
 
-# 📌 Mapping jumlah pulsa ke nominal uang
+# Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
     1: 1000,
     2: 2000,
@@ -41,7 +41,7 @@ def log_transaction(message):
 
 app = Flask(__name__)
 
-# 📌 Variabel Global
+# Variabel Global
 pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
@@ -49,10 +49,10 @@ remaining_balance = 0
 remaining_due = 0  
 id_trx = None
 total_inserted = 0  
-last_pulse_received_time = time.time()
+sent_status = False  # Untuk mencegah pengiriman berulang
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time
+    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status
 
     if not transaction_active:
         return
@@ -60,10 +60,8 @@ def count_pulse(gpio, level, tick):
     current_time = time.time()
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
-        last_pulse_time = current_time
-        last_pulse_received_time = current_time  
-        print(f"Pulsa diterima: {pulse_count}")
-
+        last_pulse_time = current_time  
+        
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -71,27 +69,27 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  
 
-        threading.Thread(target=delayed_transaction_check, daemon=True).start()  
+        if not sent_status:
+            sent_status = True
+            threading.Thread(target=delayed_transaction_check, daemon=True).start()  
 
 def delayed_transaction_check():
-    global transaction_active, total_inserted, remaining_balance, remaining_due
-    time.sleep(PULSE_WAIT_TIME)  # Tunggu 3 detik setelah pulsa terakhir
+    global transaction_active, total_inserted, remaining_balance, remaining_due, sent_status
+    time.sleep(PULSE_WAIT_TIME)  
     
     if total_inserted < remaining_balance:
         remaining_due = remaining_balance - total_inserted
-        log_transaction(f"⚠️ Uang kurang Rp.{remaining_due}, timeout dalam 15 detik")
+        log_transaction(f"⚠️ Uang kurang Rp.{remaining_due}, timeout dalam {TIMEOUT} detik")
         start_timeout_timer()
-    elif total_inserted == remaining_balance:
-        log_transaction(f"✅ Transaksi berhasil, total: Rp.{total_inserted}")
-        send_transaction_status("success", total_inserted, 0, 0)
-        transaction_active = False
-        pi.write(EN_PIN, 0)
     else:
-        overpaid = total_inserted - remaining_balance
-        log_transaction(f"✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
-        send_transaction_status("overpaid", total_inserted, overpaid, 0)
+        status = "success" if total_inserted == remaining_balance else "overpaid"
+        overpaid = max(0, total_inserted - remaining_balance)
+        log_transaction(f"✅ Transaksi {status}, total: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}")
+        send_transaction_status(status, total_inserted, overpaid, 0)
         transaction_active = False
         pi.write(EN_PIN, 0)
+    
+    sent_status = False  # Reset agar transaksi berikutnya bisa berjalan
 
 def start_timeout_timer():
     global transaction_active, remaining_due
@@ -124,7 +122,7 @@ def closest_valid_pulse(pulses):
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted
+    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -138,6 +136,7 @@ def trigger_transaction():
     
     transaction_active = True
     total_inserted = 0
+    sent_status = False  # Reset status transaksi baru
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
