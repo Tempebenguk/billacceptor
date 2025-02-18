@@ -165,6 +165,6 @@ def trigger_transaction():
 
 if __name__ == "__main__":
     # Pasang callback untuk pin BILL_ACCEPTOR_PIN
-    while(kondisi == ya):
+    while(kondisi == "ya"):
         pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
