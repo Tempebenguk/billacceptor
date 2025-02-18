@@ -6,17 +6,17 @@ import requests
 from flask import Flask, request, jsonify
 import threading
 
-# Konfigurasi PIN GPIO
+# 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15  
 
-# Konfigurasi transaksi
+# 📌 Konfigurasi transaksi
 TIMEOUT = 15  
 DEBOUNCE_TIME = 0.05  
 TOLERANCE = 2  
 PULSE_WAIT_TIME = 3  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
 
-# Mapping jumlah pulsa ke nominal uang
+# 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
     1: 1000,
     2: 2000,
@@ -41,7 +41,7 @@ def log_transaction(message):
 
 app = Flask(__name__)
 
-# Variabel Global
+# 📌 Variabel Global
 pulse_count = 0
 last_pulse_time = time.time()
 transaction_active = False
@@ -49,7 +49,8 @@ remaining_balance = 0
 remaining_due = 0  
 id_trx = None
 total_inserted = 0  
-sent_status = False  # Untuk mencegah pengiriman berulang
+sent_status = False  # Untuk memastikan hanya satu kali kirim status transaksi
+
 
 def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status
@@ -73,6 +74,7 @@ def count_pulse(gpio, level, tick):
             sent_status = True
             threading.Thread(target=delayed_transaction_check, daemon=True).start()  
 
+
 def delayed_transaction_check():
     global transaction_active, total_inserted, remaining_balance, remaining_due, sent_status
     time.sleep(PULSE_WAIT_TIME)  
@@ -89,19 +91,18 @@ def delayed_transaction_check():
         transaction_active = False
         pi.write(EN_PIN, 0)
     
-    sent_status = False  # Reset agar transaksi berikutnya bisa berjalan
+    sent_status = False
+
 
 def start_timeout_timer():
     global transaction_active, remaining_due
-    timeout_start = time.time()
-    while transaction_active:
-        if time.time() - timeout_start >= TIMEOUT:
-            transaction_active = False
-            pi.write(EN_PIN, 0)
-            log_transaction(f"⚠️ Timeout! Kurang: Rp.{remaining_due}")
-            send_transaction_status("failed", total_inserted, 0, remaining_due)
-            return
-        time.sleep(1)
+    time.sleep(TIMEOUT)
+    if transaction_active:
+        transaction_active = False
+        pi.write(EN_PIN, 0)
+        log_transaction(f"⚠️ Timeout! Kurang: Rp.{remaining_due}")
+        send_transaction_status("failed", total_inserted, 0, remaining_due)
+
 
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
     try:
@@ -112,6 +113,7 @@ def send_transaction_status(status, total_inserted, overpaid, remaining_due):
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
 
+
 def closest_valid_pulse(pulses):
     if pulses == 1:
         return 1
@@ -119,6 +121,7 @@ def closest_valid_pulse(pulses):
         return 2
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
+
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
@@ -136,10 +139,11 @@ def trigger_transaction():
     
     transaction_active = True
     total_inserted = 0
-    sent_status = False  # Reset status transaksi baru
+    sent_status = False
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     pi.write(EN_PIN, 1)
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
+
 
 if __name__ == "__main__":
     pi = pigpio.pi()
