@@ -49,13 +49,13 @@ remaining_balance = 0
 remaining_due = 0  
 id_trx = None
 total_inserted = 0  
-sent_status = False  # Untuk memastikan hanya satu kali kirim status transaksi
-timeout_timer = None  # Timer untuk transaksi lanjutan
-first_evaluation_done = False  # Untuk menandai apakah evaluasi pertama sudah dilakukan
+sent_status = False  
+timeout_thread = None  
+first_evaluation_done = False  
 
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status, timeout_timer, first_evaluation_done, remaining_due
+    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status, timeout_thread, first_evaluation_done, remaining_due
 
     if not transaction_active:
         return
@@ -76,8 +76,7 @@ def count_pulse(gpio, level, tick):
         remaining_due = max(0, remaining_balance - total_inserted)
 
         if first_evaluation_done:
-            # Jika evaluasi pertama sudah dilakukan dan uang masih kurang, reset timeout
-            reset_timeout()
+            reset_timeout()  
         elif not sent_status:
             sent_status = True
             threading.Thread(target=delayed_transaction_check, daemon=True).start()
@@ -86,13 +85,13 @@ def count_pulse(gpio, level, tick):
 def delayed_transaction_check():
     global transaction_active, total_inserted, remaining_balance, remaining_due, sent_status, first_evaluation_done
 
-    time.sleep(PULSE_WAIT_TIME)  # Tunggu sebelum evaluasi pertama
+    time.sleep(PULSE_WAIT_TIME)  
 
     if total_inserted < remaining_balance:
         remaining_due = remaining_balance - total_inserted
         log_transaction(f"⚠️ Uang kurang Rp.{remaining_due}, timeout dalam {TIMEOUT} detik")
-        first_evaluation_done = True  # Menandai bahwa evaluasi pertama selesai
-        reset_timeout()  # Mulai timer timeout
+        first_evaluation_done = True  
+        reset_timeout()  
     else:
         process_final_transaction()
 
@@ -100,13 +99,25 @@ def delayed_transaction_check():
 
 
 def reset_timeout():
-    global timeout_timer
+    global timeout_thread
 
-    if timeout_timer:
-        timeout_timer.cancel()  # Batalkan timer lama jika ada
+    if timeout_thread:
+        timeout_thread.cancel()  
 
-    timeout_timer = threading.Timer(TIMEOUT, process_final_transaction)
-    timeout_timer.start()
+    timeout_thread = threading.Thread(target=timeout_countdown, daemon=True)
+    timeout_thread.start()
+
+
+def timeout_countdown():
+    global transaction_active, remaining_due, total_inserted
+
+    for i in range(TIMEOUT, 0, -1):
+        if not transaction_active or remaining_due == 0:  
+            return
+        log_transaction(f"⌛ Timeout dalam {i} detik... (Uang masuk: Rp.{total_inserted}, Sisa: Rp.{remaining_due})")
+        time.sleep(1)
+
+    process_final_transaction()
 
 
 def process_final_transaction():
@@ -145,7 +156,7 @@ def closest_valid_pulse(pulses):
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status, timeout_timer, first_evaluation_done, remaining_due
+    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status, timeout_thread, first_evaluation_done, remaining_due
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -160,15 +171,14 @@ def trigger_transaction():
     transaction_active = True
     total_inserted = 0
     sent_status = False
-    first_evaluation_done = False  # Reset evaluasi pertama
-    remaining_due = remaining_balance  # Reset nilai remaining_due
+    first_evaluation_done = False  
+    remaining_due = remaining_balance  
 
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     pi.write(EN_PIN, 1)
 
-    # Hapus timeout sebelumnya jika ada
-    if timeout_timer:
-        timeout_timer.cancel()
+    if timeout_thread:
+        timeout_thread.cancel()
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
