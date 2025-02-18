@@ -100,8 +100,10 @@ def count_pulse(gpio, level, tick):
         # Cek apakah saldo sudah cukup atau berlebih
         if remaining_balance > corrected_pulses:
         # Jika saldo masih kurang, lanjutkan transaksi
-            print(f"\r💳 Tagihan sisa: Rp.{(remaining_balance-corrected_pulses)*1000}.")
-            log_transaction(f"💳 Tagihan sisa: Rp.{(remaining_balance-corrected_pulses)*1000}. Masukkan sisanya.")
+            remaining_balance = remaining_balance-corrected_pulses
+            print(f"\r💳 Tagihan sisa: Rp.{remaining_balance*1000}.")
+            log_transaction(f"💳 Tagihan sisa: Rp.{remaining_balance*1000}. Masukkan sisanya.")
+            #count_pulse
             
         #    total_inserted = 0  # Reset total uang masuk untuk transaksi berikutnya
 
