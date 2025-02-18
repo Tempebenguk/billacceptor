@@ -11,10 +11,10 @@ BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15  
 
 # 📌 Konfigurasi transaksi
-TIMEOUT = 15  
+TIMEOUT = 15  # Timeout setelah pulsa terakhir jika uang masih kurang
 DEBOUNCE_TIME = 0.05  
 TOLERANCE = 2  
-PULSE_WAIT_TIME = 10  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
+PULSE_WAIT_TIME = 10  # Tunggu 10 detik setelah pulsa terakhir sebelum evaluasi transaksi pertama
 
 # 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
@@ -50,10 +50,11 @@ remaining_due = 0
 id_trx = None
 total_inserted = 0  
 sent_status = False  # Untuk memastikan hanya satu kali kirim status transaksi
+timeout_timer = None  # Timer untuk transaksi lanjutan
 
 
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status
+    global pulse_count, last_pulse_time, total_inserted, transaction_active, sent_status, timeout_timer
 
     if not transaction_active:
         return
@@ -62,7 +63,7 @@ def count_pulse(gpio, level, tick):
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time  
-        
+
         corrected_pulses = closest_valid_pulse(pulse_count)
         if corrected_pulses:
             received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
@@ -70,19 +71,22 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  
 
-        if not sent_status:
+        if remaining_balance > total_inserted:
+            # Reset timeout jika uang masih kurang
+            reset_timeout()
+        elif not sent_status:
             sent_status = True
-            threading.Thread(target=delayed_transaction_check, daemon=True).start()  
+            threading.Thread(target=delayed_transaction_check, daemon=True).start()
 
 
 def delayed_transaction_check():
     global transaction_active, total_inserted, remaining_balance, remaining_due, sent_status
-    time.sleep(PULSE_WAIT_TIME)  
+    time.sleep(PULSE_WAIT_TIME)  # Tunggu sebelum evaluasi pertama
     
     if total_inserted < remaining_balance:
         remaining_due = remaining_balance - total_inserted
         log_transaction(f"⚠️ Uang kurang Rp.{remaining_due}, timeout dalam {TIMEOUT} detik")
-        start_timeout_timer()
+        reset_timeout()  # Langsung mulai timer timeout
     else:
         status = "success" if total_inserted == remaining_balance else "overpaid"
         overpaid = max(0, total_inserted - remaining_balance)
@@ -90,13 +94,22 @@ def delayed_transaction_check():
         send_transaction_status(status, total_inserted, overpaid, 0)
         transaction_active = False
         pi.write(EN_PIN, 0)
-    
+
     sent_status = False
 
 
-def start_timeout_timer():
+def reset_timeout():
+    global timeout_timer
+
+    if timeout_timer:
+        timeout_timer.cancel()  # Batalkan timer lama jika ada
+
+    timeout_timer = threading.Timer(TIMEOUT, force_timeout)
+    timeout_timer.start()
+
+
+def force_timeout():
     global transaction_active, remaining_due
-    time.sleep(TIMEOUT)
     if transaction_active:
         transaction_active = False
         pi.write(EN_PIN, 0)
@@ -125,7 +138,7 @@ def closest_valid_pulse(pulses):
 
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status
+    global transaction_active, remaining_balance, id_trx, total_inserted, sent_status, timeout_timer
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -142,6 +155,11 @@ def trigger_transaction():
     sent_status = False
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
     pi.write(EN_PIN, 1)
+
+    # Hapus timeout sebelumnya jika ada
+    if timeout_timer:
+        timeout_timer.cancel()
+
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 
