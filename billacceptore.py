@@ -125,7 +125,7 @@ def start_timeout_timer():
         time.sleep(1)
 
         # **Logika pengecekan setelah 2 detik**
-        if current_time - last_pulse_received_time >= 2:
+        if current_time - last_pulse_received_time >= 1:
             if total_inserted >= remaining_balance:
                 overpaid = total_inserted - remaining_balance
                 if total_inserted == remaining_balance:
