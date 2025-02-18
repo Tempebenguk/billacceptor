@@ -4,6 +4,7 @@ import datetime
 import os
 import requests
 from flask import Flask, request, jsonify
+import threading
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -94,30 +95,35 @@ def count_pulse(gpio, level, tick):
             last_pulse_received_time = current_time  # Update waktu pulsa terakhir diterima
             print("\r⏳ Menunggu pulsa lebih lanjut sebelum menghitung...", end="")
 
-    # **Cooldown Timer Logic**
-    if current_time - last_pulse_received_time >= TIMEOUT:
-        # Timeout tercapai, matikan bill acceptor dan kirim status transaksi
-        pi.write(EN_PIN, 0)
-        transaction_active = False
-        if total_inserted < remaining_balance:
-            deficit = remaining_balance - total_inserted
-            print(f"\r⏰ Timeout! Uang yang diterima kurang. Total diterima: Rp.{total_inserted}, Kekurangan: Rp.{deficit}")
-            log_transaction(f"⚠️ Transaksi timeout, kurang: Rp.{deficit}")
-            send_transaction_status("failed", total_inserted, deficit)
-        elif total_inserted == remaining_balance:
-            print(f"\r✅ Timeout! Transaksi berhasil, total uang diterima: Rp.{total_inserted}")
-            log_transaction(f"✅ Transaksi berhasil. Total uang diterima: Rp.{total_inserted}")
-            send_transaction_status("success", total_inserted, 0)
-        else:
-            overpaid = total_inserted - remaining_balance
-            print(f"\r✅ Timeout! Transaksi berhasil, uang lebih: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}")
-            log_transaction(f"✅ Transaksi berhasil. Kelebihan: Rp.{overpaid}")
-            send_transaction_status("overpaid", total_inserted, overpaid)
+# **Cooldown Timer Logic**
+def start_timeout_timer():
+    global total_inserted, remaining_balance, transaction_active, last_pulse_received_time, id_trx
 
-    else:
-        # Menampilkan waktu cooldown yang tersisa
-        remaining_time = TIMEOUT - (current_time - last_pulse_received_time)
-        print(f"\r⏳ Timeout in {remaining_time:.1f} detik...", end="")
+    while transaction_active:
+        current_time = time.time()
+        if current_time - last_pulse_received_time >= TIMEOUT:
+            # Timeout tercapai, matikan bill acceptor dan kirim status transaksi
+            pi.write(EN_PIN, 0)
+            transaction_active = False
+            if total_inserted < remaining_balance:
+                deficit = remaining_balance - total_inserted
+                print(f"\r⏰ Timeout! Uang yang diterima kurang. Total diterima: Rp.{total_inserted}, Kekurangan: Rp.{deficit}")
+                log_transaction(f"⚠️ Transaksi timeout, kurang: Rp.{deficit}")
+                send_transaction_status("failed", total_inserted, deficit)
+            elif total_inserted == remaining_balance:
+                print(f"\r✅ Timeout! Transaksi berhasil, total uang diterima: Rp.{total_inserted}")
+                log_transaction(f"✅ Transaksi berhasil. Total uang diterima: Rp.{total_inserted}")
+                send_transaction_status("success", total_inserted, 0)
+            else:
+                overpaid = total_inserted - remaining_balance
+                print(f"\r✅ Timeout! Transaksi berhasil, uang lebih: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}")
+                log_transaction(f"✅ Transaksi berhasil. Kelebihan: Rp.{overpaid}")
+                send_transaction_status("overpaid", total_inserted, overpaid)
+        else:
+            # Menampilkan waktu cooldown yang tersisa
+            remaining_time = TIMEOUT - (current_time - last_pulse_received_time)
+            print(f"\r⏳ Timeout in {remaining_time:.1f} detik...", end="")
+        time.sleep(1)
 
 # Fungsi untuk mengirim status transaksi
 def send_transaction_status(status, total_inserted, overpaid):
@@ -163,6 +169,10 @@ def trigger_transaction():
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
     pi.write(EN_PIN, 1)
+
+    # Mulai timer timeout di thread terpisah
+    threading.Thread(target=start_timeout_timer, daemon=True).start()
+
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
