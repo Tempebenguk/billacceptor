@@ -98,7 +98,7 @@ def count_pulse(gpio, level, tick):
         # Update remaining_balance setiap kali pulsa dihitung
         # remaining_balance -= corrected_pulses
         print(f"\r💳 Saldo yang masuk: Rp.{corrected_pulses*1000}", end="")
-        kondisi = input("Masukkan uang lagi?")
+        kondisi = input("Masukkan uang lagi?").lower
 
         # Cek apakah saldo sudah cukup atau berlebih
         #if remaining_balance == corrected_pulses:
