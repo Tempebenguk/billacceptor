@@ -52,6 +52,9 @@ total_inserted = 0  # Total uang yang dimasukkan
 last_pulse_received_time = time.time()  # Waktu terakhir pulsa diterima
 PULSE_WAIT_TIME = 3  # Waktu tunggu setelah pulsa terakhir (detik)
 
+# 📌 Timeout dan Cooldown Timer
+last_transaction_time = time.time()
+
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
 if not pi.connected:
@@ -65,7 +68,7 @@ pi.write(EN_PIN, 0)
 
 # Fungsi untuk menghitung pulsa dan memperbarui transaksi
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx, last_pulse_received_time
+    global pulse_count, last_pulse_time, transaction_active, total_inserted, remaining_balance, id_trx, last_pulse_received_time, last_transaction_time
 
     if not transaction_active:
         return
@@ -88,36 +91,45 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0  # Reset pulse count setelah konversi
 
-        # Cek apakah pulsa sudah cukup dan ada penundaan
-        if total_inserted >= remaining_balance:
-            # Jika tagihan sudah tercapai, tunggu beberapa detik untuk melihat apakah ada pulsa lain
-            last_pulse_received_time = current_time  # Update waktu pulsa terakhir diterima
-            print("\r⏳ Menunggu pulsa lebih lanjut sebelum menghitung...", end="")
+        # Reset waktu terakhir pulsa diterima
+        last_pulse_received_time = current_time
 
-    # Periksa apakah sudah cukup waktu sejak pulsa terakhir diterima
-    if current_time - last_pulse_received_time > PULSE_WAIT_TIME:
-        # Jika sudah cukup waktu, dan total_inserted sudah cukup untuk menyelesaikan transaksi
-        if total_inserted >= remaining_balance:
-            overpaid_amount = total_inserted - remaining_balance  # Kelebihan bayar jika total_inserted > remaining_balance
-            remaining_balance = 0  # Set saldo menjadi 0 setelah transaksi selesai
-            transaction_active = False  # Tandai transaksi selesai
-            pi.write(EN_PIN, 0)  # Matikan bill acceptor
-            print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}", end="")
-            log_transaction(f"✅ Transaksi {id_trx} selesai. Kelebihan: Rp.{overpaid_amount}")
+        # Reset timeout timer setiap kali pulsa diterima
+        last_transaction_time = current_time
 
-            # Kirim API bahwa transaksi sudah selesai
-            try:
-                print("📡 Mengirim status transaksi ke server...")
-                response = requests.post("http://172.16.100.174:5000/api/receive",
-                                         json={"id_trx": id_trx, "status": "success", "total_inserted": total_inserted, "overpaid": overpaid_amount},
-                                         timeout=5)
-                print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
-                log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
-            except requests.exceptions.RequestException as e:
-                log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-                print(f"⚠️ Gagal mengirim status transaksi: {e}")
+    # Periksa timeout transaksi
+    if current_time - last_transaction_time > TIMEOUT:
+        if total_inserted < remaining_balance:
+            # Jika uang yang dimasukkan kurang dari tagihan
+            shortfall = remaining_balance - total_inserted
+            log_transaction(f"⚠️ Transaksi gagal: Kurang Rp.{shortfall}")
+            print(f"\r❌ Transaksi gagal! Kurang Rp.{shortfall}")
+            send_transaction_status("failed", total_inserted, shortfall)
         else:
-            print(f"\r💳 Saldo masih kurang, menunggu pulsa berikutnya...", end="")
+            # Jika uang yang dimasukkan cukup atau lebih
+            overpaid_amount = total_inserted - remaining_balance
+            log_transaction(f"✅ Transaksi selesai. Kelebihan bayar: Rp.{overpaid_amount}")
+            print(f"\r✅ Transaksi selesai! Kelebihan bayar: Rp.{overpaid_amount}")
+            send_transaction_status("success", total_inserted, overpaid_amount)
+        
+        # Matikan bill acceptor setelah timeout
+        pi.write(EN_PIN, 0)
+        transaction_active = False
+        total_inserted = 0  # Reset total uang yang dimasukkan
+        remaining_balance = 0  # Reset saldo yang harus dibayar
+
+# Fungsi untuk mengirim status transaksi
+def send_transaction_status(status, total_inserted, overpaid_or_shortfall):
+    try:
+        print("📡 Mengirim status transaksi ke server...")
+        response = requests.post("http://172.16.100.174:5000/api/receive",
+                                 json={"id_trx": id_trx, "status": status, "total_inserted": total_inserted, "overpaid_or_shortfall": overpaid_or_shortfall},
+                                 timeout=5)
+        print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
+        log_transaction(f"📡 Data pulsa dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+    except requests.exceptions.RequestException as e:
+        log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+        print(f"⚠️ Gagal mengirim status transaksi: {e}")
 
 # Fungsi untuk mendapatkan pulsa yang valid
 def closest_valid_pulse(pulses):
@@ -131,7 +143,7 @@ def closest_valid_pulse(pulses):
 # Endpoint untuk memulai transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, remaining_balance, id_trx, total_inserted
+    global transaction_active, remaining_balance, id_trx, total_inserted, last_transaction_time
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -149,6 +161,7 @@ def trigger_transaction():
     print(f"Bill acceptor diaktifkan. Tagihan: Rp.{remaining_balance}")
     
     pi.write(EN_PIN, 1)
+    last_transaction_time = time.time()  # Mulai timer cooldown
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
 if __name__ == "__main__":
