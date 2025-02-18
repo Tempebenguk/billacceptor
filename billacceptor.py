@@ -14,7 +14,7 @@ EN_PIN = 15
 TIMEOUT = 15  
 DEBOUNCE_TIME = 0.05  
 TOLERANCE = 2  
-PULSE_WAIT_TIME = 3  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
+PULSE_WAIT_TIME = 10  # Tunggu 3 detik setelah pulsa terakhir sebelum evaluasi
 
 # 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
