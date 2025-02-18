@@ -129,9 +129,9 @@ def count_pulse(gpio, level, tick):
             # Set cooldown agar menunggu uang selanjutnya
         #    cooldown_start = time.time()
 
-        else:
+        elif remaining_balance < corrected_pulses :
         #Jika ada kelebihan bayar, selesai transaksi
-            corrected_pulses -= remaining_balance
+            corrected_pulses = corrected_pulses - remaining_balance
             print(f"\r💳 Uang yang dimasukkan lebih dari cukup. Kelebihan: Rp.{corrected_pulses*1000}", end="")
             log_transaction(f"💳 Kelebihan bayar: Rp.{corrected_pulses*1000}. Transaksi selesai.")
             transaction_active = False
