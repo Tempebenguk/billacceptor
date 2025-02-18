@@ -124,6 +124,22 @@ def start_timeout_timer():
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")  # **Tampilkan sebagai integer**
         time.sleep(1)
 
+        # **Logika pengecekan setelah 2 detik**
+        if current_time - last_pulse_received_time >= 2:
+            if total_inserted >= remaining_balance:
+                # Jika uang sudah cukup atau lebih, langsung kirim status transaksi dan hentikan transaksi
+                overpaid = total_inserted - remaining_balance
+                if total_inserted == remaining_balance:
+                    print(f"\r✅ Transaksi selesai, total: Rp.{total_inserted}")
+                    send_transaction_status("success", total_inserted, 0, 0)  # Transaksi sukses
+                else:
+                    print(f"\r✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+                    send_transaction_status("overpaid", total_inserted, overpaid, 0)  # Transaksi sukses, tapi kelebihan uang
+                transaction_active = False
+                pi.write(EN_PIN, 0)  # Matikan bill acceptor
+
+                break
+
 # Fungsi untuk mengirim status transaksi
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
     """Mengirim status transaksi ke server backend."""
