@@ -66,6 +66,16 @@ pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)  # Matikan bill acceptor saat awal
 
+# Fungsi untuk mendapatkan pulsa yang valid
+def closest_valid_pulse(pulses):
+    """Mendapatkan jumlah pulsa yang paling mendekati nilai yang valid."""
+    if pulses == 1:
+        return 1
+    if 2 < pulses < 5:
+        return 2
+    closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
+    return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
+
 # Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
