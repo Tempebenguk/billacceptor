@@ -109,8 +109,10 @@ def trigger_transaction():
     
     transaction_active = True
     total_inserted = 0
-    
-    log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
+
+    # 🔹 Mengaktifkan bill acceptor
+    pi.write(EN_PIN, 1)  # Menghidupkan bill acceptor
+    log_transaction(f"✅ Bill acceptor diaktifkan untuk transaksi ID: {id_trx}, Tagihan: Rp.{remaining_balance}")
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
