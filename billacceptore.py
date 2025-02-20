@@ -5,6 +5,7 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
+import py8583
 
 # Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -136,19 +137,42 @@ def start_timeout_timer():
                 pi.write(EN_PIN, 0)
                 break
 
-# Fungsi untuk mengirim status transaksi
+# Fungsi untuk mengirim status transaksi dengan format ISO 8583
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
-    """Mengirim status transaksi ke server backend."""
+    """Mengirim status transaksi ke server backend dalam format ISO 8583."""
     try:
-        print("Mengirim status transaksi ke server...")
-        response = requests.post("http://172.16.100.165:5000/api/receive",
-                                 json={"id_trx": id_trx, "status": status, "total_inserted": total_inserted, "overpaid": overpaid, "remaining_due": remaining_due},
-                                 timeout=5) # Endpoint penerima status dan data hasil transaksi (Sesuaikan dengan endpoint dan kebutuhan)
+        # Membuat pesan ISO 8583
+        iso_message = create_iso8583_message(status, total_inserted, overpaid, remaining_due)
+        
+        # Kirim pesan ISO 8583 ke server
+        response = requests.post("http://172.16.100.165:5000/api/receive", 
+                                 data={"iso_message": iso_message}, timeout=5)
+        
         print(f"POST sukses: {response.status_code}, Response: {response.text}")
-        log_transaction(f"Data dikirim ke server. Status: {response.status_code}, Response: {response.text}")
+        log_transaction(f"Data ISO 8583 dikirim ke server. Status: {response.status_code}, Response: {response.text}")
     except requests.exceptions.RequestException as e:
-        log_transaction(f"Gagal mengirim status transaksi: {e}")
+        log_transaction(f"Gagal mengirim status transaksi dalam format ISO 8583: {e}")
         print(f"Gagal mengirim status transaksi: {e}")
+
+# Fungsi untuk membuat pesan ISO 8583
+def create_iso8583_message(status, total_inserted, overpaid, remaining_due):
+    """Membuat pesan ISO 8583 menggunakan pustaka py8583."""
+    iso_message = py8583.ISO8583()
+
+    # Set Message Type Indicator (MTI), misalnya 0200 untuk transaksi permintaan
+    iso_message.set_type('0200')
+
+    # Set Elemen Data
+    iso_message.set(4, total_inserted)  # Jumlah transaksi
+    iso_message.set(37, id_trx)         # ID Transaksi
+    iso_message.set(39, status)         # Status transaksi
+    iso_message.set(54, overpaid)       # Kelebihan pembayaran (jika ada)
+    iso_message.set(55, remaining_due)  # Kekurangan pembayaran (jika ada)
+    iso_message.set(12, datetime.datetime.now().strftime('%H%M%S'))  # Waktu transaksi
+    iso_message.set(13, datetime.datetime.now().strftime('%m%d'))  # Tanggal transaksi
+
+    # Menghasilkan pesan ISO 8583 dalam format string
+    return iso_message.get_iso()
 
 # Fungsi untuk mendapatkan pulsa yang valid
 def closest_valid_pulse(pulses):
