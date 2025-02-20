@@ -113,6 +113,7 @@ def start_timeout_timer():
                 print(f"\r✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
                 log_transaction(f"✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
                 send_transaction_status("overpaid", total_inserted, overpaid, 0)
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")  # **Tampilkan sebagai integer**
         time.sleep(1)
 
         # **Logika pengecekan setelah 2 detik**
