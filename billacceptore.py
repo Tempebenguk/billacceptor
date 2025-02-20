@@ -145,7 +145,7 @@ def send_transaction_status(status, total_inserted, overpaid, remaining_due):
         iso_message = create_iso8583_message(status, total_inserted, overpaid, remaining_due)
         
         # Kirim pesan ISO 8583 ke server
-        response = requests.post("http://172.16.100.165:5000/api/receive", 
+        response = requests.post("http://172.16.100.150:5000/api/receive", 
                                  data={"iso_message": iso_message}, timeout=5)
         
         print(f"POST sukses: {response.status_code}, Response: {response.text}")
