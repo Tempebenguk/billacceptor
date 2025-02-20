@@ -182,7 +182,7 @@ def send_transaction_status(status, total_inserted, overpaid, remaining_due):
             "overpaid": overpaid,
             "remaining_due": remaining_due
         })
-        response = requests.post("http://172.16.100.165:5000/api/receive",
+        response = requests.post("http://172.16.100.150:5000/api/receive",
                                  json={"data": encrypted_data},
                                  timeout=5)
         print(f"POST sukses: {response.status_code}, Response: {response.text}")
