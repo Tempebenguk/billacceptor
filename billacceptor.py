@@ -61,7 +61,7 @@ total_inserted = 0
 
 # Fungsi untuk mengirim status transaksi dengan mekanisme retry
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
-    url = "http://172.16.100.165:5000/api/receive"
+    url = "http://172.16.100.150:5000/api/receive"
     payload = {
         "id_trx": id_trx,
         "status": status,
