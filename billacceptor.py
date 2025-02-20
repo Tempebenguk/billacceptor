@@ -37,7 +37,7 @@ ISO_CODES = {
 }
 
 # 📌 Lokasi penyimpanan log transaksi
-LOG_DIR = "./logs"
+LOG_DIR = "/var/www/html/logs"
 LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 
 if not os.path.exists(LOG_DIR):
