@@ -136,7 +136,7 @@ def send_transaction_status(status, total_inserted, overpaid, remaining_due):
     for attempt in range(MAX_RETRIES):
         try:
             print("📡 Mengirim status transaksi ke server...")
-            response = requests.post("http://172.16.100.165:5000/api/receive",
+            response = requests.post("http://172.16.100.150:5000/api/receive",
                                      json={"id_trx": id_trx, "status": status, "iso_code": iso_code, "total_inserted": total_inserted, "overpaid": overpaid, "remaining_due": remaining_due},
                                      timeout=5)
             print(f"✅ POST sukses: {response.status_code}, Response: {response.text}")
