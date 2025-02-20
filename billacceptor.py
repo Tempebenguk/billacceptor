@@ -37,7 +37,7 @@ ISO_CODES = {
 }
 
 # 📌 Lokasi penyimpanan log transaksi
-LOG_DIR = "/var/www/html/logs"
+LOG_DIR = "./logs"
 LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 
 if not os.path.exists(LOG_DIR):
@@ -59,9 +59,19 @@ remaining_balance = 0
 id_trx = None
 total_inserted = 0
 
+# 📌 Inisialisasi pigpio
+pi = pigpio.pi()
+if not pi.connected:
+    log_transaction("⚠️ Gagal terhubung ke pigpio daemon!")
+    exit()
+
+# Atur EN_PIN ke 0 saat awal
+pi.set_mode(EN_PIN, pigpio.OUTPUT)
+pi.write(EN_PIN, 0)  # Mematikan bill acceptor saat awal
+
 # Fungsi untuk mengirim status transaksi dengan mekanisme retry
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
-    url = "http://172.16.100.150:5000/api/receive"
+    url = "http://172.16.100.165:5000/api/receive"
     payload = {
         "id_trx": id_trx,
         "status": status,
