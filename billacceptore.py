@@ -72,7 +72,7 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
 # Fungsi untuk mengenkripsi data
-ENCRYPTION_KEY = b"your-256-bit-encryption-key-here"  # Ganti dengan kunci 16, 24, atau 32 byte yang valid
+ENCRYPTION_KEY = b"ei98fyt3tge5ry46th41ry94019iueh7"
 
 def generate_iv():
     return os.urandom(16)
