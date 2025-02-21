@@ -42,7 +42,7 @@ def log_transaction(message):
     with open(LOG_FILE, "a") as log:
         log.write(f"{timestamp} {message}\n")
     print(f"{timestamp} {message}")
-    
+
 # 📌 Inisialisasi Flask
 app = Flask(__name__)
 
@@ -76,7 +76,13 @@ def fetch_invoice_details(payment_token):
         response_data = response.json()
         if response.status_code == 200 and "data" in response_data:
             invoice_data = response_data["data"]
-            return invoice_data["ID"], invoice_data["paymentToken"], invoice_data["productPrice"]
+            try:
+                product_price = int(invoice_data["productPrice"])  # Konversi ke integer
+            except (ValueError, TypeError):
+                log_transaction(f"⚠️ Gagal mengonversi productPrice: {invoice_data['productPrice']}")
+                return None, None, None
+
+            return invoice_data["ID"], invoice_data["paymentToken"], product_price
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
     return None, None, None
@@ -115,9 +121,8 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
         last_pulse_received_time = current_time
 
-        corrected_pulses = closest_valid_pulse(pulse_count)
-        if corrected_pulses:
-            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+        received_amount = PULSE_MAPPING.get(pulse_count, 0)
+        if received_amount:
             total_inserted += received_amount
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0
