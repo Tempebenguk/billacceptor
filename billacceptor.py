@@ -138,21 +138,28 @@ def send_transaction_status():
 
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
+    """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
     global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, timeout_thread
 
     if not transaction_active:
         return
 
     current_time = time.time()
+
+    # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        last_pulse_received_time = current_time  # 🔥 Reset waktu timeout saat uang masuk
+        last_pulse_received_time = current_time  # **Cooldown reset setiap pulsa masuk**
+        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
 
-        received_amount = PULSE_MAPPING.get(pulse_count, 0)
-        if received_amount:
+        # Konversi pulsa ke uang dengan koreksi pulsa
+        corrected_pulses = closest_valid_pulse(pulse_count)
+        if corrected_pulses:
+            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
             total_inserted += received_amount
             remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
+            print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
             log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
             pulse_count = 0  # Reset count setelah log
 
