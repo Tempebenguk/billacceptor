@@ -93,9 +93,14 @@ def fetch_invoice_details(payment_token):
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
     return None, None, None
+
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
     global total_inserted, transaction_active, last_pulse_received_time
+
+    if not transaction_active:  # 🔥 Cegah pengiriman ganda
+        log_transaction("⚠️ Transaksi sudah selesai, tidak mengirim ulang status.")
+        return
 
     try:
         response = requests.post(BILL_API, json={
