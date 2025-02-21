@@ -114,17 +114,19 @@ def send_transaction_status():
                 log_transaction("🔄 Pembayaran kurang, lanjutkan memasukkan uang...")
                 last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
                 transaction_active = True  # Pastikan transaksi tetap aktif
+                pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
                 reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
+                pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN setelah transaksi selesai
 
         else:
             log_transaction(f"⚠️ Respon tidak terduga: {response.status_code}")
 
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-        
+
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time
