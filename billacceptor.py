@@ -178,8 +178,8 @@ def trigger_transaction():
 
     id_trx, payment_token, product_price = fetch_invoice_details(payment_token)
 
-   if id_trx is None or product_price is None:
-    return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400
+    if id_trx is None or product_price is None:
+        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400
 
     transaction_active = True
     last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
