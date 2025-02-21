@@ -101,12 +101,17 @@ def send_transaction_status():
             log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment_date')}")
             reset_transaction()  # Reset setelah sukses
         elif response.status_code == 400:
-            log_transaction("⚠️ Gagal: Pembayaran kurang")
+            try:
+                res_data = response.json()
+                error_message = res_data.get("error") or res_data.get("message", "Error tidak diketahui")
+            except ValueError:
+                error_message = response.text  # Jika JSON tidak valid, gunakan respons mentah
+
+            log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
         else:
             log_transaction(f"⚠️ Respon tidak terduga: {response.status_code}")
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
-
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time
