@@ -28,7 +28,7 @@ PULSE_MAPPING = {
 
 # 📌 API URL
 INVOICE_API = "https://api-dev.xpdisi.id/invoice/"
-BILL_API = "https://api-dev.xpdisi.id/order/billacceptor"
+BILL_API = "https://api-dev.xpdisi.com/order/billacceptor"
 
 # 📌 Lokasi penyimpanan log transaksi
 LOG_DIR = "/var/www/html/logs"
@@ -54,8 +54,6 @@ total_inserted = 0
 id_trx = None
 payment_token = None
 product_price = 0
-remaining_balance = 0  # **Sisa kelebihan uang**
-remaining_due = 0  # **Sisa kekurangan pembayaran**
 last_pulse_received_time = time.time()
 
 # 📌 Inisialisasi pigpio
@@ -77,7 +75,7 @@ def fetch_invoice_details(payment_token):
         if response.status_code == 200 and "data" in response_data:
             invoice_data = response_data["data"]
             try:
-                product_price = int(invoice_data["productPrice"])  # Konversi ke integer
+                product_price = int(invoice_data["productPrice"])
             except (ValueError, TypeError):
                 log_transaction(f"⚠️ Gagal mengonversi productPrice: {invoice_data['productPrice']}")
                 return None, None, None
@@ -89,18 +87,19 @@ def fetch_invoice_details(payment_token):
 
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
-    global id_trx, payment_token, total_inserted
+    global total_inserted
 
     try:
         response = requests.post(BILL_API, json={
             "ID": id_trx,
             "paymentToken": payment_token,
-            "productPrice": total_inserted
+            "productPrice": total_inserted  # Hanya mengirim total uang yang masuk
         }, timeout=5)
 
         if response.status_code == 200:
             res_data = response.json()
             log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment_date')}")
+            reset_transaction()  # Reset setelah sukses
         elif response.status_code == 400:
             log_transaction("⚠️ Gagal: Pembayaran kurang")
         else:
@@ -127,34 +126,44 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
             pulse_count = 0
 
-# 📌 Fungsi untuk menangani timeout
+# 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global transaction_active, product_price, total_inserted, remaining_balance, remaining_due
+    global transaction_active, total_inserted, product_price
 
     while transaction_active:
+        remaining_time = TIMEOUT - int(time.time() - last_pulse_received_time)
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
-        if time.time() - last_pulse_received_time >= TIMEOUT:
-            pi.write(EN_PIN, 0)
+
+        if time.time() - last_pulse_received_time >= 2:
+            if total_inserted >= product_price:
+                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+                send_transaction_status()
+                transaction_active = False
+                pi.write(EN_PIN, 0)
+                break
+
+        if remaining_time <= 0:
             transaction_active = False
-            remaining_due = max(0, product_price - total_inserted)  # Sisa tagihan jika kurang
-            remaining_balance = max(0, total_inserted - product_price)  # Sisa kelebihan jika lebih
-
+            pi.write(EN_PIN, 0)
             log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted}, Tagihan: Rp.{product_price}")
-            
-            if total_inserted < product_price:
-                log_transaction(f"⚠️ Kurang bayar: Rp.{remaining_due}")
-            elif total_inserted > product_price:
-                log_transaction(f"✅ Transaksi sukses, kelebihan Rp.{remaining_balance}")
-            else:
-                log_transaction("✅ Transaksi sukses, jumlah pas")
-
             send_transaction_status()
             break
+
+# 📌 Reset transaksi setelah selesai
+def reset_transaction():
+    global transaction_active, total_inserted, id_trx, payment_token, product_price
+    transaction_active = False
+    total_inserted = 0
+    id_trx = None
+    payment_token = None
+    product_price = 0
+    log_transaction("🔄 Transaksi di-reset ke default.")
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, remaining_balance, remaining_due
+    global transaction_active, total_inserted, id_trx, payment_token, product_price
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -171,11 +180,6 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Gagal mengambil detail invoice"}), 500
 
     transaction_active = True
-    total_inserted = 0
-    remaining_balance = 0
-    remaining_due = 0
-    last_pulse_received_time = time.time()
-
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
     pi.write(EN_PIN, 1)
     threading.Thread(target=start_timeout_timer, daemon=True).start()
