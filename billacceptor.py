@@ -68,40 +68,42 @@ pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
-def send_transaction_status():
-    global total_inserted, transaction_active
+# 📌 Fungsi GET ke API Invoice (Tambahan pengecekan ispaid sebagai string)
+import requests
 
+def fetch_invoice_details(payment_token):
     try:
-        response = requests.post(BILL_API, json={
-            "ID": id_trx,
-            "paymentToken": payment_token,
-            "productPrice": total_inserted
-        }, timeout=5)
+        url = f"{INVOICE_API}{payment_token}"  # Pastikan URL benar
+        response = requests.get(url, timeout=5)
+        response_data = response.json()
+        
+        if response.status_code == 200 and "data" in response_data:
+            invoice_data = response_data["data"]
 
-        if response.status_code == 200:
-            res_data = response.json()
-            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('paymentDate')}")
-            reset_transaction()
+            # Ambil "isPaid" dengan huruf besar, default False jika tidak ada
+            is_paid = bool(invoice_data.get("isPaid", False))
 
-        elif response.status_code == 400:
-            res_data = response.json()
-            error_message = res_data.get("error") or res_data.get("message", "Error tidak diketahui")
-            log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
-
-            if "Insufficient payment" in error_message:
-                log_transaction("🔄 Pembayaran kurang, lanjutkan memasukkan uang...")
-                transaction_active = True
-                pi.write(EN_PIN, 1)
-                start_timeout_timer()
-
-            elif "Payment already completed" in error_message:
-                log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
-                reset_transaction()
-                pi.write(EN_PIN, 0)
+            if is_paid:  
+                log_transaction("⚠️ Transaksi dibatalkan: Invoice sudah dibayar sebelumnya.")
+                return None, None, None, True  # ✅ True = Sudah dibayar
+            
+            # Ambil nilai "productPrice" dengan aman
+            try:
+                product_price = int(invoice_data["productPrice"])  # API mengembalikan string, jadi konversi
+            except (ValueError, TypeError):
+                log_transaction(f"⚠️ Gagal mengonversi productPrice: {invoice_data['productPrice']}")
+                return None, None, None, False
+            
+            # Kembalikan ID, paymentToken, dan productPrice jika belum dibayar
+            return invoice_data["ID"], invoice_data["paymentToken"], product_price, False  # ✅ False = Belum dibayar
+        
+        else:
+            log_transaction(f"⚠️ Gagal mengambil data invoice: {response.text}")
 
     except requests.exceptions.RequestException as e:
-        log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+        log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
 
+    return None, None, None, False
 
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
