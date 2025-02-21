@@ -68,7 +68,6 @@ pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
-# 📌 Fungsi GET ke API Invoice
 # 📌 Fungsi GET ke API Invoice (Tambahan pengecekan ispaid sebagai string)
 def fetch_invoice_details(payment_token):
     try:
@@ -86,7 +85,7 @@ def fetch_invoice_details(payment_token):
                 return None, None, None, True  # ✅ True = sudah dibayar
             
             try:
-                product_price = int(invoice_data["productprice"])  # Pastikan huruf kecil sesuai API
+                product_price = int(invoice_data["productPrice"])  # Pastikan huruf kecil sesuai API
             except (ValueError, TypeError):
                 log_transaction(f"⚠️ Gagal mengonversi productprice: {invoice_data['productprice']}")
                 return None, None, None, False
