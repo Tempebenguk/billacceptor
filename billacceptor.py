@@ -118,7 +118,7 @@ def count_pulse(gpio, level, tick):
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        last_pulse_received_time = current_time
+        last_pulse_received_time = current_time  # 🔥 Reset waktu terakhir penerimaan pulsa
 
         received_amount = PULSE_MAPPING.get(pulse_count, 0)
         if received_amount:
@@ -128,10 +128,11 @@ def count_pulse(gpio, level, tick):
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global transaction_active, total_inserted, product_price
+    global transaction_active, total_inserted, product_price, last_pulse_received_time
 
     while transaction_active:
         remaining_time = TIMEOUT - int(time.time() - last_pulse_received_time)
+        remaining_time = max(remaining_time, 0)  # 🔥 Pastikan tidak minus
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
@@ -152,18 +153,19 @@ def start_timeout_timer():
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
     transaction_active = False
     total_inserted = 0
     id_trx = None
     payment_token = None
     product_price = 0
+    last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
     log_transaction("🔄 Transaksi di-reset ke default.")
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
 
     if transaction_active:
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
@@ -180,6 +182,7 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Gagal mengambil detail invoice"}), 500
 
     transaction_active = True
+    last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
     pi.write(EN_PIN, 1)
     threading.Thread(target=start_timeout_timer, daemon=True).start()
