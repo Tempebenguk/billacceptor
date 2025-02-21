@@ -97,10 +97,11 @@ def fetch_invoice_details(payment_token):
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
     global total_inserted, transaction_active, last_pulse_received_time, transaction_completed
-
     if transaction_completed:  # 🔥 Cegah transaksi terkirim dua kali
         log_transaction("⚠️ Transaksi sudah selesai, tidak mengirim ulang.")
         return
+
+    transaction_completed = True  # 🔥 Tandai transaksi sudah selesai SEBELUM request dikirim
 
     try:
         response = requests.post(BILL_API, json={
@@ -210,8 +211,9 @@ def start_timeout_timer():
 
             # **🔥 Kirim status transaksi hanya jika belum terkirim**
             if not transaction_completed:
+                transaction_completed = True  # 🔥 Tandai transaksi sudah selesai SEBELUM mengirim status
                 send_transaction_status()
-                transaction_completed = True  # 🔥 Tandai transaksi sudah selesai
+
 
             break  # **Hentikan loop setelah sukses**
 
@@ -225,9 +227,8 @@ def reset_transaction():
     payment_token = None
     product_price = 0
     last_pulse_received_time = time.time()
-    transaction_completed = False  # 🔥 Reset flag transaksi selesai
+    transaction_completed = False  # 🔥 Reset status transaksi selesai
     log_transaction("🔄 Transaksi di-reset ke default.")
-
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
