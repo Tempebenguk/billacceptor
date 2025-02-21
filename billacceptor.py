@@ -199,6 +199,8 @@ def start_timeout_timer():
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
             
+            overpaid = max(0, total_inserted - product_price)  # 🔥 Ensure overpaid is set
+
             if total_inserted == product_price:
                 log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
             else:
