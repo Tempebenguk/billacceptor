@@ -5,10 +5,6 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-import base64
-import json
 
 # Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14  # Pin pulsa dari bill acceptor (DT)
@@ -38,7 +34,6 @@ LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
-# Fungsi log transaksi
 def log_transaction(message):
     """Menyimpan log transaksi ke file dan mencetak ke console."""
     timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
@@ -70,35 +65,6 @@ pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
-
-# Fungsi untuk mengenkripsi data
-ENCRYPTION_KEY = b"ei98fyt3tge5ry46th41ry94019iueh7"
-
-def generate_iv():
-    return os.urandom(16)
-
-def encrypt_data(data: dict) -> str:
-    """Mengenkripsi data menggunakan AES."""
-    json_data = json.dumps(data)
-    iv = generate_iv()
-    cipher = AES.new(ENCRYPTION_KEY, AES.MODE_CBC, iv)
-    padded_data = pad(json_data.encode(), AES.block_size)
-    encrypted_data = cipher.encrypt(padded_data)
-    iv_base64 = base64.b64encode(iv).decode('utf-8')
-    encrypted_data_base64 = base64.b64encode(encrypted_data).decode('utf-8')
-    return json.dumps({
-        'iv': iv_base64,
-        'encrypted_data': encrypted_data_base64
-    })
-
-def decrypt_data(encrypted_data_json: str) -> dict:
-    """Mendekripsi data menggunakan AES."""
-    data = json.loads(encrypted_data_json)
-    iv = base64.b64decode(data['iv'])
-    encrypted_data = base64.b64decode(data['encrypted_data'])
-    cipher = AES.new(ENCRYPTION_KEY, AES.MODE_CBC, iv)
-    decrypted_data = unpad(cipher.decrypt(encrypted_data), AES.block_size)
-    return json.loads(decrypted_data.decode('utf-8'))
 
 # Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
@@ -170,21 +136,14 @@ def start_timeout_timer():
                 pi.write(EN_PIN, 0)
                 break
 
-# Fungsi untuk mengirim status transaksi ke server
+# Fungsi untuk mengirim status transaksi
 def send_transaction_status(status, total_inserted, overpaid, remaining_due):
     """Mengirim status transaksi ke server backend."""
     try:
         print("Mengirim status transaksi ke server...")
-        encrypted_data = encrypt_data({
-            "id_trx": id_trx,
-            "status": status,
-            "total_inserted": total_inserted,
-            "overpaid": overpaid,
-            "remaining_due": remaining_due
-        })
-        response = requests.post("http://172.16.100.150:5000/api/receive",
-                                 json={"data": encrypted_data},
-                                 timeout=5)
+        response = requests.post("http://172.16.100.165:5000/api/receive",
+                                 json={"id_trx": id_trx, "status": status, "total_inserted": total_inserted, "overpaid": overpaid, "remaining_due": remaining_due},
+                                 timeout=5) # Endpoint penerima status dan data hasil transaksi (Sesuaikan dengan endpoint dan kebutuhan)
         print(f"POST sukses: {response.status_code}, Response: {response.text}")
         log_transaction(f"Data dikirim ke server. Status: {response.status_code}, Response: {response.text}")
     except requests.exceptions.RequestException as e:
