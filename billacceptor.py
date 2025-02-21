@@ -163,34 +163,56 @@ def count_pulse(gpio, level, tick):
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global transaction_active, total_inserted, product_price, last_pulse_received_time, timeout_thread
+    """Mengatur timer untuk mendeteksi timeout transaksi."""
+    global total_inserted, remaining_balance, transaction_active, last_pulse_received_time, id_trx
 
     while transaction_active:
-        remaining_time = TIMEOUT - int(time.time() - last_pulse_received_time)
-        remaining_time = max(remaining_time, 0)  # 🔥 Pastikan tidak minus
+        current_time = time.time()
+        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # **Timeout sebagai integer**
+
+        if remaining_time == 0:
+            # **🔥 Timeout tercapai, hentikan transaksi**
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
+            
+            remaining_due = max(0, remaining_balance - total_inserted)  # **Cegah nilai negatif**
+            overpaid = max(0, total_inserted - remaining_balance)
+
+            if total_inserted < remaining_balance:
+                # **Gagal, uang kurang**
+                log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
+                send_transaction_status("failed", total_inserted, 0, remaining_due)
+            elif total_inserted == remaining_balance:
+                # **Berhasil, pembayaran sesuai**
+                log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
+                send_transaction_status("success", total_inserted, 0, 0)
+            else:
+                # **Berhasil, uang berlebih**
+                log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+                send_transaction_status("overpaid", total_inserted, overpaid, 0)
+
+            break  # **Hentikan loop setelah timeout**
+
+        # **Tampilkan waktu timeout di terminal**
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
-        remaining_due = max(product_price - total_inserted, 0)  # 🔥 Hitung sisa tagihan
+        # **🔥 Cek apakah cukup uang setelah 2 detik tanpa pulsa tambahan**
+        if (current_time - last_pulse_received_time) >= 2 and total_inserted >= remaining_balance:
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
+            
+            overpaid = max(0, total_inserted - remaining_balance)
 
-        # 🔥 Perbarui timeout jika ada pulsa masuk (agar tidak langsung timeout)
-        if time.time() - last_pulse_received_time < TIMEOUT:
-            continue  # Timeout akan diperpanjang jika ada pulsa masuk
+            if total_inserted == remaining_balance:
+                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+                send_transaction_status("success", total_inserted, 0, 0)
+            else:
+                log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+                send_transaction_status("overpaid", total_inserted, overpaid, 0)
 
-        # 🔥 Cek apakah pembayaran sudah cukup
-        if total_inserted >= product_price:
-            log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted} | Kembalian: Rp.{total_inserted - product_price}")
-            send_transaction_status()
-            reset_transaction()  # 🔥 Reset transaksi
-            pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi selesai
-            break
+            break  # **Hentikan loop setelah sukses**
 
-        # 🔥 Jika timeout terjadi dan masih kurang uangnya
-        transaction_active = False
-        pi.write(EN_PIN, 0)
-        log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted} | Sisa Tagihan: Rp.{remaining_due}")
-        send_transaction_status()
-        break
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
