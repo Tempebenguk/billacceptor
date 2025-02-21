@@ -115,7 +115,8 @@ def send_transaction_status():
                 last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
                 transaction_active = True  # Pastikan transaksi tetap aktif
                 pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
-
+                start_timeout_timer()
+                
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
                 reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
