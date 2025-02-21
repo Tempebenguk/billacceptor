@@ -98,7 +98,7 @@ def send_transaction_status():
 
         if response.status_code == 200:
             res_data = response.json()
-            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment_date')}")
+            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('paymentDate')}")
             reset_transaction()  # 🔥 Reset transaksi setelah sukses
 
         elif response.status_code == 400:
@@ -116,7 +116,7 @@ def send_transaction_status():
                 transaction_active = True  # Pastikan transaksi tetap aktif
                 pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
                 start_timeout_timer()
-                
+
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
                 reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
@@ -130,7 +130,7 @@ def send_transaction_status():
 
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time
+    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price
 
     if not transaction_active:
         return
@@ -144,8 +144,9 @@ def count_pulse(gpio, level, tick):
         received_amount = PULSE_MAPPING.get(pulse_count, 0)
         if received_amount:
             total_inserted += received_amount
-            log_transaction(f"💰 Total uang masuk: Rp.{total_inserted}")
-            pulse_count = 0
+            remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
+            log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+            pulse_count = 0  # Reset count setelah log
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
@@ -157,18 +158,22 @@ def start_timeout_timer():
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
+        remaining_due = max(product_price - total_inserted, 0)  # 🔥 Hitung sisa tagihan
+
         if time.time() - last_pulse_received_time >= 2:
             if total_inserted >= product_price:
-                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+                log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted} | Kembalian: Rp.{total_inserted - product_price}")
                 send_transaction_status()
                 transaction_active = False
                 pi.write(EN_PIN, 0)
                 break
+            else:
+                log_transaction(f"⌛ Menunggu tambahan uang... Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
 
         if remaining_time <= 0:
             transaction_active = False
             pi.write(EN_PIN, 0)
-            log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted}, Tagihan: Rp.{product_price}")
+            log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted} | Sisa Tagihan: Rp.{remaining_due}")
             send_transaction_status()
             break
 
