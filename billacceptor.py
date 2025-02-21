@@ -87,7 +87,7 @@ def fetch_invoice_details(payment_token):
 
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
-    global total_inserted
+    global total_inserted, transaction_active, last_pulse_received_time
 
     try:
         response = requests.post(BILL_API, json={
@@ -99,7 +99,8 @@ def send_transaction_status():
         if response.status_code == 200:
             res_data = response.json()
             log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment_date')}")
-            reset_transaction()  # Reset setelah sukses
+            reset_transaction()  # 🔥 Reset transaksi setelah sukses
+
         elif response.status_code == 400:
             try:
                 res_data = response.json()
@@ -108,10 +109,22 @@ def send_transaction_status():
                 error_message = response.text  # Jika JSON tidak valid, gunakan respons mentah
 
             log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
+
+            if "Insufficient payment" in error_message:
+                log_transaction("🔄 Pembayaran kurang, lanjutkan memasukkan uang...")
+                last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
+                transaction_active = True  # Pastikan transaksi tetap aktif
+
+            elif "Payment already completed" in error_message:
+                log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
+                reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
+
         else:
             log_transaction(f"⚠️ Respon tidak terduga: {response.status_code}")
+
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+        
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time
