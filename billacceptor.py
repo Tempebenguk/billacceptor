@@ -69,22 +69,33 @@ pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
 
 # 📌 Fungsi GET ke API Invoice
+# 📌 Fungsi GET ke API Invoice (Tambahan pengecekan ispaid sebagai string)
 def fetch_invoice_details(payment_token):
     try:
         response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
         response_data = response.json()
         if response.status_code == 200 and "data" in response_data:
             invoice_data = response_data["data"]
+            
+            # 🔥 Pastikan pengecekan "ispaid" sebagai string ("true"/"false")
+            is_paid = str(invoice_data.get("ispaid", "false")).lower().strip()  # Pastikan lowercase & trim
+            
+            # 🔥 Jika "ispaid" adalah "true", berarti sudah dibayar → transaksi dibatalkan
+            if is_paid == "true":  
+                log_transaction("⚠️ Transaksi dibatalkan: Invoice sudah dibayar sebelumnya.")
+                return None, None, None, True  # ✅ True = sudah dibayar
+            
             try:
-                product_price = int(invoice_data["productPrice"])
+                product_price = int(invoice_data["productprice"])  # Pastikan huruf kecil sesuai API
             except (ValueError, TypeError):
-                log_transaction(f"⚠️ Gagal mengonversi productPrice: {invoice_data['productPrice']}")
-                return None, None, None
+                log_transaction(f"⚠️ Gagal mengonversi productprice: {invoice_data['productprice']}")
+                return None, None, None, False
 
-            return invoice_data["ID"], invoice_data["paymentToken"], product_price
+            return invoice_data["id"], invoice_data["paymenttoken"], product_price, False  # ✅ False = belum dibayar
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
-    return None, None, None
+    return None, None, None, False
+
 
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
@@ -156,34 +167,55 @@ def count_pulse(gpio, level, tick):
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global transaction_active, total_inserted, product_price, last_pulse_received_time, timeout_thread
+    """Mengatur timer untuk mendeteksi timeout transaksi."""
+    global total_inserted, remaining_balance, transaction_active, last_pulse_received_time, id_trx, remaining_due
 
     while transaction_active:
-        remaining_time = TIMEOUT - int(time.time() - last_pulse_received_time)
-        remaining_time = max(remaining_time, 0)  # 🔥 Pastikan tidak minus
-        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
+        current_time = time.time()
+        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # **Integer timeout**
+        
+        if remaining_time == 0:
+            # Timeout tercapai, matikan bill acceptor
+            pi.write(EN_PIN, 0)
+            transaction_active = False
+            
+            if total_inserted < remaining_balance:
+                remaining_due = remaining_balance - total_inserted  # **Hitung sisa tagihan**
+                print(f"\r⏰ Timeout! Kurang: Rp.{remaining_due}")
+                log_transaction(f"⚠️ Transaksi gagal, kurang: Rp.{remaining_due}")
+                send_transaction_status("failed", total_inserted, 0, remaining_due)  # **Kirim sebagai "failed" dengan sisa tagihan**
+            elif total_inserted == remaining_balance:
+                print(f"\r✅ Transaksi berhasil, total: Rp.{total_inserted}")
+                log_transaction(f"✅ Transaksi berhasil, total: Rp.{total_inserted}")
+                send_transaction_status("success", total_inserted, 0, 0)  # **Transaksi sukses**
+            else:
+                overpaid = total_inserted - remaining_balance
+                print(f"\r✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
+                log_transaction(f"✅ Transaksi berhasil, kelebihan: Rp.{overpaid}")
+                send_transaction_status("overpaid", total_inserted, overpaid, 0)  # **Transaksi sukses, tapi kelebihan uang**
+            
+            reset_transaction()  # **Reset transaksi setelah timeout**
+            break
+        
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")  # **Tampilkan sebagai integer**
         time.sleep(1)
 
-        remaining_due = max(product_price - total_inserted, 0)  # 🔥 Hitung sisa tagihan
-
-        # 🔥 Perbarui timeout jika ada pulsa masuk (agar tidak langsung timeout)
-        if time.time() - last_pulse_received_time < TIMEOUT:
-            continue  # Timeout akan diperpanjang jika ada pulsa masuk
-
-        # 🔥 Cek apakah pembayaran sudah cukup
-        if total_inserted >= product_price:
-            log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted} | Kembalian: Rp.{total_inserted - product_price}")
-            send_transaction_status()
-            reset_transaction()  # 🔥 Reset transaksi
-            pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi selesai
-            break
-
-        # 🔥 Jika timeout terjadi dan masih kurang uangnya
-        transaction_active = False
-        pi.write(EN_PIN, 0)
-        log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted} | Sisa Tagihan: Rp.{remaining_due}")
-        send_transaction_status()
-        break
+        # **Logika pengecekan setelah 2 detik**
+        if current_time - last_pulse_received_time >= 2:
+            if total_inserted >= remaining_balance:
+                # Jika uang sudah cukup atau lebih, langsung kirim status transaksi dan hentikan transaksi
+                overpaid = total_inserted - remaining_balance
+                if total_inserted == remaining_balance:
+                    print(f"\r✅ Transaksi selesai, total: Rp.{total_inserted}")
+                    send_transaction_status("success", total_inserted, 0, 0)  # Transaksi sukses
+                else:
+                    print(f"\r✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+                    send_transaction_status("overpaid", total_inserted, overpaid, 0)  # Transaksi sukses, tapi kelebihan uang
+                
+                transaction_active = False
+                pi.write(EN_PIN, 0)  # Matikan bill acceptor
+                reset_transaction()  # **Reset transaksi setelah sukses**
+                break
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
