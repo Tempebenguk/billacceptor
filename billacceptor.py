@@ -55,6 +55,7 @@ id_trx = None
 payment_token = None
 product_price = 0
 last_pulse_received_time = time.time()
+timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -130,7 +131,7 @@ def send_transaction_status():
 
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
-    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price
+    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, timeout_thread
 
     if not transaction_active:
         return
@@ -139,7 +140,7 @@ def count_pulse(gpio, level, tick):
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
         pulse_count += 1
         last_pulse_time = current_time
-        last_pulse_received_time = current_time  # 🔥 Reset waktu terakhir penerimaan pulsa
+        last_pulse_received_time = current_time  # 🔥 Reset waktu timeout saat uang masuk
 
         received_amount = PULSE_MAPPING.get(pulse_count, 0)
         if received_amount:
@@ -148,9 +149,14 @@ def count_pulse(gpio, level, tick):
             log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
             pulse_count = 0  # Reset count setelah log
 
+            # 🔥 Cegah multiple timeout threads
+            if timeout_thread is None or not timeout_thread.is_alive():
+                timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+                timeout_thread.start()
+
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global transaction_active, total_inserted, product_price, last_pulse_received_time
+    global transaction_active, total_inserted, product_price, last_pulse_received_time, timeout_thread
 
     while transaction_active:
         remaining_time = TIMEOUT - int(time.time() - last_pulse_received_time)
@@ -160,22 +166,24 @@ def start_timeout_timer():
 
         remaining_due = max(product_price - total_inserted, 0)  # 🔥 Hitung sisa tagihan
 
-        if time.time() - last_pulse_received_time >= 2:
-            if total_inserted >= product_price:
-                log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted} | Kembalian: Rp.{total_inserted - product_price}")
-                send_transaction_status()
-                transaction_active = False
-                pi.write(EN_PIN, 0)
-                break
-            else:
-                log_transaction(f"⌛ Menunggu tambahan uang... Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+        # 🔥 Perbarui timeout jika ada pulsa masuk (agar tidak langsung timeout)
+        if time.time() - last_pulse_received_time < TIMEOUT:
+            continue  # Timeout akan diperpanjang jika ada pulsa masuk
 
-        if remaining_time <= 0:
-            transaction_active = False
-            pi.write(EN_PIN, 0)
-            log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted} | Sisa Tagihan: Rp.{remaining_due}")
+        # 🔥 Cek apakah pembayaran sudah cukup
+        if total_inserted >= product_price:
+            log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted} | Kembalian: Rp.{total_inserted - product_price}")
             send_transaction_status()
+            reset_transaction()  # 🔥 Reset transaksi
+            pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi selesai
             break
+
+        # 🔥 Jika timeout terjadi dan masih kurang uangnya
+        transaction_active = False
+        pi.write(EN_PIN, 0)
+        log_transaction(f"⏰ Timeout! Total masuk: Rp.{total_inserted} | Sisa Tagihan: Rp.{remaining_due}")
+        send_transaction_status()
+        break
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
@@ -205,7 +213,7 @@ def trigger_transaction():
     id_trx, payment_token, product_price = fetch_invoice_details(payment_token)
 
     if id_trx is None or product_price is None:
-        return jsonify({"status": "error", "message": "Gagal mengambil detail invoice"}), 500
+        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400  # 🔥 Tambahkan error jika invoice sudah dibayar
 
     transaction_active = True
     last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
