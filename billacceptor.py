@@ -164,25 +164,25 @@ def count_pulse(gpio, level, tick):
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
     """Mengatur timer untuk mendeteksi timeout transaksi."""
-    global total_inserted, remaining_balance, transaction_active, last_pulse_received_time, id_trx
+    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
 
     while transaction_active:
         current_time = time.time()
-        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # **Timeout sebagai integer**
+        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # Timeout sebagai integer
 
         if remaining_time == 0:
             # **🔥 Timeout tercapai, hentikan transaksi**
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
             
-            remaining_due = max(0, remaining_balance - total_inserted)  # **Cegah nilai negatif**
-            overpaid = max(0, total_inserted - remaining_balance)
+            remaining_due = max(0, product_price - total_inserted)  # **Cegah nilai negatif**
+            overpaid = max(0, total_inserted - product_price)
 
-            if total_inserted < remaining_balance:
+            if total_inserted < product_price:
                 # **Gagal, uang kurang**
                 log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
                 send_transaction_status("failed", total_inserted, 0, remaining_due)
-            elif total_inserted == remaining_balance:
+            elif total_inserted == product_price:
                 # **Berhasil, pembayaran sesuai**
                 log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
                 send_transaction_status("success", total_inserted, 0, 0)
@@ -198,13 +198,13 @@ def start_timeout_timer():
         time.sleep(1)
 
         # **🔥 Cek apakah cukup uang setelah 2 detik tanpa pulsa tambahan**
-        if (current_time - last_pulse_received_time) >= 2 and total_inserted >= remaining_balance:
+        if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
             
-            overpaid = max(0, total_inserted - remaining_balance)
+            overpaid = max(0, total_inserted - product_price)
 
-            if total_inserted == remaining_balance:
+            if total_inserted == product_price:
                 log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
                 send_transaction_status("success", total_inserted, 0, 0)
             else:
