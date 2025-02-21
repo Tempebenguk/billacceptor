@@ -57,6 +57,7 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 
+
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
 if not pi.connected:
@@ -95,7 +96,11 @@ def fetch_invoice_details(payment_token):
     return None, None, None
 # 📌 Fungsi POST hasil transaksi
 def send_transaction_status():
-    global total_inserted, transaction_active, last_pulse_received_time
+    global total_inserted, transaction_active, last_pulse_received_time, transaction_completed
+
+    if transaction_completed:  # 🔥 Cegah pengiriman status transaksi dua kali
+        log_transaction("⚠️ Transaksi sudah dikirim sebelumnya, tidak mengirim ulang status.")
+        return
 
     try:
         response = requests.post(BILL_API, json={
@@ -107,6 +112,7 @@ def send_transaction_status():
         if response.status_code == 200:
             res_data = response.json()
             log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('paymentDate')}")
+            transaction_completed = True  # 🔥 Tandai transaksi sebagai selesai
             reset_transaction()  # 🔥 Reset transaksi setelah sukses
 
         elif response.status_code == 400:
@@ -127,7 +133,8 @@ def send_transaction_status():
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
-                pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN setelah transaksi selesai
+                transaction_completed = True  # 🔥 Tandai transaksi selesai agar tidak mengirim ulang
+                reset_transaction()  # 🔥 Reset transaksi
 
         else:
             log_transaction(f"⚠️ Respon tidak terduga: {response.status_code}")
@@ -163,14 +170,13 @@ def count_pulse(gpio, level, tick):
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
     """Mengatur timer untuk mendeteksi timeout transaksi."""
-    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
+    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx, transaction_completed
 
     while transaction_active:
         current_time = time.time()
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # Timeout dalam detik
 
         if remaining_time == 0:
-            # **🔥 Timeout tercapai, hentikan transaksi**
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan bill acceptor
             
@@ -184,12 +190,12 @@ def start_timeout_timer():
             else:
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
 
-            # **🔥 Kirim status transaksi**
-            send_transaction_status()
+            # **🔥 Kirim status transaksi hanya jika belum terkirim**
+            if not transaction_completed:
+                send_transaction_status()
 
             break  # **Hentikan loop setelah timeout**
 
-        # **Tampilkan waktu timeout di terminal**
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
@@ -205,22 +211,26 @@ def start_timeout_timer():
             else:
                 log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
 
-            # **🔥 Kirim status transaksi**
-            send_transaction_status()
+            # **🔥 Kirim status transaksi hanya jika belum terkirim**
+            if not transaction_completed:
+                send_transaction_status()
 
             break  # **Hentikan loop setelah sukses**
 
 
+
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, transaction_completed
     transaction_active = False
     total_inserted = 0
     id_trx = None
     payment_token = None
     product_price = 0
-    last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
+    last_pulse_received_time = time.time()
+    transaction_completed = False  # 🔥 Reset flag transaksi selesai
     log_transaction("🔄 Transaksi di-reset ke default.")
+
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
