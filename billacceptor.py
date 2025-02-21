@@ -135,6 +135,15 @@ def send_transaction_status():
 
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+        
+def closest_valid_pulse(pulses):
+    """Mendapatkan jumlah pulsa yang paling mendekati nilai yang valid."""
+    if pulses == 1:
+        return 1
+    if 2 < pulses < 5:
+        return 2
+    closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
+    return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
