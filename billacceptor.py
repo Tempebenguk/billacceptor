@@ -241,7 +241,7 @@ def trigger_transaction():
     if not payment_token:
         return jsonify({"status": "error", "message": "Token pembayaran tidak valid"}), 400
 
-    id_trx, payment_token, product_price = fetch_invoice_details(payment_token)
+    payment_token = fetch_invoice_details(payment_token)
 
     if id_trx is None or product_price is None:
         return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400  # 🔥 Tambahkan error jika invoice sudah dibayar
