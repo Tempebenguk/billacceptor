@@ -56,7 +56,7 @@ payment_token = None
 product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
-
+transaction_completed = False  # 🔥 Cegah pengiriman transaksi dua kali
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
