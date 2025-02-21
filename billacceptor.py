@@ -87,10 +87,10 @@ def fetch_invoice_details(payment_token):
             try:
                 product_price = int(invoice_data["productPrice"])  # Pastikan huruf kecil sesuai API
             except (ValueError, TypeError):
-                log_transaction(f"⚠️ Gagal mengonversi productprice: {invoice_data['productprice']}")
+                log_transaction(f"⚠️ Gagal mengonversi productPrice: {invoice_data['productprice']}")
                 return None, None, None, False
 
-            return invoice_data["id"], invoice_data["paymenttoken"], product_price, False  # ✅ False = belum dibayar
+            return invoice_data["ID"], invoice_data["paymentToken"], product_price, False  # ✅ False = belum dibayar
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
     return None, None, None, False
