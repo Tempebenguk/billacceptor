@@ -238,6 +238,7 @@ def reset_transaction():
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
+@app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
 
@@ -245,20 +246,29 @@ def trigger_transaction():
         return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
 
     data = request.json
-    payment_token = data.get("paymentToken")
+    payment_token_input = data.get("paymentToken")  # 🔥 Simpan input asli untuk referensi
 
-    if not payment_token:
+    if not payment_token_input:
         return jsonify({"status": "error", "message": "Token pembayaran tidak valid"}), 400
 
-    payment_token = fetch_invoice_details(payment_token)
+    # 🔥 Ambil semua nilai yang dikembalikan oleh fetch_invoice_details
+    id_trx, payment_token, product_price, is_paid = fetch_invoice_details(payment_token_input)
 
+    # 🔥 Pastikan invoice belum dibayar
+    if is_paid:
+        return jsonify({"status": "error", "message": "Invoice sudah dibayar"}), 400
+
+    # 🔥 Pastikan id_trx dan product_price valid
     if id_trx is None or product_price is None:
-        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400  # 🔥 Tambahkan error jika invoice sudah dibayar
+        return jsonify({"status": "error", "message": "Invoice tidak valid"}), 400  
 
+    # ✅ Semua valid → Mulai transaksi
     transaction_active = True
-    last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
+    last_pulse_received_time = time.time()  # 🔥 Reset timeout
+
     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
-    pi.write(EN_PIN, 1)
+
+    pi.write(EN_PIN, 1)  # GPIO untuk transaksi
     threading.Thread(target=start_timeout_timer, daemon=True).start()
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
