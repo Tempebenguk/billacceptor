@@ -127,7 +127,6 @@ def send_transaction_status():
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
-                reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
                 pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN setelah transaksi selesai
 
         else:
