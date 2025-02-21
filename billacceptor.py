@@ -93,8 +93,75 @@ def fetch_invoice_details(payment_token):
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengambil data invoice: {e}")
     return None, None, None
-
 # 📌 Fungsi POST hasil transaksi
+def send_transaction_status():
+    global total_inserted, transaction_active, last_pulse_received_time
+
+    try:
+        response = requests.post(BILL_API, json={
+            "ID": id_trx,
+            "paymentToken": payment_token,
+            "productPrice": total_inserted  # Hanya mengirim total uang yang masuk
+        }, timeout=5)
+
+        if response.status_code == 200:
+            res_data = response.json()
+            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('paymentDate')}")
+            reset_transaction()  # 🔥 Reset transaksi setelah sukses
+
+        elif response.status_code == 400:
+            try:
+                res_data = response.json()
+                error_message = res_data.get("error") or res_data.get("message", "Error tidak diketahui")
+            except ValueError:
+                error_message = response.text  # Jika JSON tidak valid, gunakan respons mentah
+
+            log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
+
+            if "Insufficient payment" in error_message:
+                log_transaction("🔄 Pembayaran kurang, lanjutkan memasukkan uang...")
+                last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
+                transaction_active = True  # Pastikan transaksi tetap aktif
+                pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
+                start_timeout_timer()
+
+            elif "Payment already completed" in error_message:
+                log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
+                reset_transaction()  # 🔥 Jika sudah selesai, reset transaksi
+                pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN setelah transaksi selesai
+
+        else:
+            log_transaction(f"⚠️ Respon tidak terduga: {response.status_code}")
+
+    except requests.exceptions.RequestException as e:
+        log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+
+# 📌 Fungsi untuk menghitung pulsa
+def count_pulse(gpio, level, tick):
+    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, timeout_thread
+
+    if not transaction_active:
+        return
+
+    current_time = time.time()
+    if (current_time - last_pulse_time) > DEBOUNCE_TIME:
+        pulse_count += 1
+        last_pulse_time = current_time
+        last_pulse_received_time = current_time  # 🔥 Reset waktu timeout saat uang masuk
+
+        received_amount = PULSE_MAPPING.get(pulse_count, 0)
+        if received_amount:
+            total_inserted += received_amount
+            remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
+            log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+            pulse_count = 0  # Reset count setelah log
+
+            # 🔥 Cegah multiple timeout threads
+            if timeout_thread is None or not timeout_thread.is_alive():
+                timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+                timeout_thread.start()
+
+# 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
     """Mengatur timer untuk mendeteksi timeout transaksi."""
     global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
@@ -141,7 +208,6 @@ def start_timeout_timer():
             send_transaction_status()
 
             break  # **Hentikan loop setelah sukses**
-
 
 
 # 📌 Reset transaksi setelah selesai
