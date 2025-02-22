@@ -58,6 +58,8 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
+pending_pulse_count = 0  # Menyimpan jumlah pulsa yang diterima dalam satu sesi
+
 
 
 # 📌 Inisialisasi pigpio
@@ -158,7 +160,7 @@ def closest_valid_pulse(pulses):
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
-    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, timeout_thread
+    global pulse_count, last_pulse_time, last_pulse_received_time, pending_pulse_count, timeout_thread
 
     if not transaction_active:
         return
@@ -167,25 +169,13 @@ def count_pulse(gpio, level, tick):
 
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
-        pulse_count += 1
+        pending_pulse_count += 1
         last_pulse_time = current_time
         last_pulse_received_time = current_time  # **Cooldown reset setiap pulsa masuk**
-        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
-
-        # Konversi pulsa ke uang dengan koreksi pulsa
-        corrected_pulses = closest_valid_pulse(pulse_count)
-        if corrected_pulses:
-            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-            total_inserted += received_amount
-            remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
-            print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
-            log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
-            pulse_count = 0  # Reset count setelah log
-
-            # 🔥 Cegah multiple timeout threads
-            if timeout_thread is None or not timeout_thread.is_alive():
-                timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
-                timeout_thread.start()
+        print(f"🔢 Pulsa diterima: {pending_pulse_count}")  # Debugging
+        if timeout_thread is None or not timeout_thread.is_alive():
+            timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+            timeout_thread.start()
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
@@ -220,23 +210,30 @@ def start_timeout_timer():
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
-        # **🔥 Cek apakah cukup uang setelah 2 detik tanpa pulsa tambahan**
-        if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
-            transaction_active = False
-            pi.write(EN_PIN, 0)  # Matikan bill acceptor
-            
-            overpaid = max(0, total_inserted - product_price)  # 🔥 Ensure overpaid is set
+        # 🔥 Koreksi pulsa setelah 2 detik tidak ada tambahan
+        if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
+            process_final_pulse_count()
+def process_final_pulse_count():
+    """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
+    global pending_pulse_count, total_inserted, pulse_count
 
-            if total_inserted == product_price:
-                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-            else:
-                log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+    if pending_pulse_count == 0:
+        return
 
-            # **🔥 Kirim status transaksi**
-            send_transaction_status()
+    # 🔥 Koreksi pulsa dengan toleransi ±2
+    corrected_pulses = closest_valid_pulse(pending_pulse_count)
 
-            break  # **Hentikan loop setelah sukses**
+    if corrected_pulses:
+        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+        total_inserted += received_amount
+        remaining_due = max(product_price - total_inserted, 0)
 
+        log_transaction(f"💰 Koreksi pulsa: {pending_pulse_count} -> {corrected_pulses} ({received_amount}) | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+    
+    else:
+        log_transaction(f"⚠️ Pulsa {pending_pulse_count} tidak valid!")
+
+    pending_pulse_count = 0  # Reset setelah diproses
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
