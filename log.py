@@ -1,21 +1,40 @@
-import os
-import subprocess
-from datetime import datetime
+from flask import Flask, request, jsonify
+import datetime
 
-log_file = "/var/www/html/logs/log.txt"
+app = Flask(__name__)
 
-date_str = datetime.now().strftime('%Y-%m-%d')
-renamed_log_file = f"/var/www/html/logs/log_{date_str}.txt"
+# 📌 Lokasi penyimpanan log
+LOG_FILE = "troubleshoot_log.txt"
 
-os.rename(log_file, renamed_log_file)
+def log_message(message):
+    """Menyimpan log ke file dan mencetaknya ke terminal."""
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    log_entry = f"{timestamp} {message}\n"
+    
+    # Simpan ke file log
+    with open(LOG_FILE, "a") as log:
+        log.write(log_entry)
+    
+    # Cetak ke terminal langsung
+    print(log_entry, end="", flush=True)
 
-subprocess.run(["git", "add", renamed_log_file])
+@app.route("/api/test", methods=["POST"])
+def test_trigger():
+    """Menerima request dan mencatatnya untuk troubleshooting."""
+    data = request.json
 
-subprocess.run(["git", "commit", "-m", f"Update Log {date_str}"])
+    log_message(f"📥 Menerima request: {data}")
 
-subprocess.run(["git", "push", "origin", "main"])
+    # Cek apakah `paymentToken` ada di request
+    payment_token = data.get("paymentToken")
+    if not payment_token:
+        log_message("⚠️ Token pembayaran tidak ditemukan!")
+        return jsonify({"status": "error", "message": "Token pembayaran tidak valid"}), 400
 
-with open(log_file, 'w') as f:
-    pass
+    log_message(f"✅ Token valid: {payment_token}")
+    
+    return jsonify({"status": "success", "message": "Trigger diterima", "paymentToken": payment_token})
 
-os.remove(renamed_log_file)
+if __name__ == "__main__":
+    print("\n🚀 API Troubleshooting berjalan di http://0.0.0.0:5000/api/test\n", flush=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
