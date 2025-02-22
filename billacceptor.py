@@ -14,6 +14,7 @@ EN_PIN = 15
 TIMEOUT = 15
 DEBOUNCE_TIME = 0.05
 TOLERANCE = 2
+MAX_RETRY = 2  # 🔥 Maksimal ulang 2 kali
 
 # 📌 Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
@@ -56,6 +57,7 @@ payment_token = None
 product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
+insufficient_payment_count = 0
 
 
 # 📌 Inisialisasi pigpio
@@ -120,11 +122,19 @@ def send_transaction_status():
             log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
 
             if "Insufficient payment" in error_message:
-                log_transaction("🔄 Pembayaran kurang, lanjutkan memasukkan uang...")
-                last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
-                transaction_active = True  # Pastikan transaksi tetap aktif
-                pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
-                start_timeout_timer()
+                global insufficient_payment_count
+                insufficient_payment_count += 1  # 🔥 Tambah hitungan gagal
+
+                if insufficient_payment_count > MAX_RETRY:
+                    log_transaction("🚫 Pembayaran kurang dan telah melebihi toleransi transaksi, transaksi dibatalkan!")
+                    reset_transaction()
+                    pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
+                else:
+                    log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Lanjutkan memasukkan uang...")
+                    last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
+                    transaction_active = True  # Pastikan transaksi tetap aktif
+                    pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
+                    start_timeout_timer()
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
@@ -230,13 +240,14 @@ def start_timeout_timer():
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count
     transaction_active = False
     total_inserted = 0
     id_trx = None
     payment_token = None
     product_price = 0
     last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
+    insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
     log_transaction("🔄 Transaksi di-reset ke default.")
 
 # 📌 API untuk Memulai Transaksi
