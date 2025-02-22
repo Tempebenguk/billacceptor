@@ -169,6 +169,8 @@ def count_pulse(gpio, level, tick):
 
     # Pastikan debounce
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
+        if pending_pulse_count == 0:
+            pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN saat mulai counting
         pending_pulse_count += 1
         last_pulse_time = current_time
         last_pulse_received_time = current_time  # **Cooldown reset setiap pulsa masuk**
@@ -234,7 +236,8 @@ def process_final_pulse_count():
         log_transaction(f"⚠️ Pulsa {pending_pulse_count} tidak valid!")
 
     pending_pulse_count = 0  # Reset setelah diproses
-
+    pi.write(EN_PIN, 1)  # 🔥 Hidupkan kembali EN_PIN setelah koreksi
+    print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count
