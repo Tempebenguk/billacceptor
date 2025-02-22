@@ -5,7 +5,7 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
-
+#Final tapi sisa reset inssuficient (max Retry)
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
