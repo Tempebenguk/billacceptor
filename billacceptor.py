@@ -128,7 +128,7 @@ def send_transaction_status():
                 if insufficient_payment_count > MAX_RETRY:
                     log_transaction("🚫 Pembayaran kurang dan telah melebihi toleransi transaksi, transaksi dibatalkan!")
                     reset_transaction()
-                    pi.write(EN_PIN, 1)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
+                    pi.write(EN_PIN, 0)  # 🔥 Pastikan EN_PIN tetap menyala agar tetap menerima uang
                 else:
                     log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Lanjutkan memasukkan uang...")
                     last_pulse_received_time = time.time()  # 🔥 Reset timer agar timeout diperpanjang
@@ -210,10 +210,7 @@ def start_timeout_timer():
                 log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
             else:
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
-              # 🔥 Jika sudah gagal 2 kali, langsung tutup bill acceptor
-            if insufficient_payment_count >= MAX_RETRY:
-                log_transaction("🚫 Transaksi gagal 2 kali, menutup bill acceptor.")
-                pi.write(EN_PIN, 0)  # 🔥 Pastikan benar-benar mati
+
             # **🔥 Kirim status transaksi**
             send_transaction_status()
 
@@ -251,7 +248,6 @@ def reset_transaction():
     product_price = 0
     last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
     insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
-    pi.write(EN_PIN, 0)  # Matikan bill acceptor
     log_transaction("🔄 Transaksi di-reset ke default.")
 
 # 📌 API untuk Memulai Transaksi
