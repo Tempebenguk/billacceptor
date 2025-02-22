@@ -276,7 +276,12 @@ def trigger_transaction():
     threading.Thread(target=start_timeout_timer, daemon=True).start()
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
-
+# 📌 API untuk Mengecek Status Bill Acceptor
+@app.route("/api/status", methods=["POST"])
+def check_status():
+    if transaction_active:
+        return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
+    return jsonify({"status": "success", "message": "Bill acceptor ready"}), 200
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
