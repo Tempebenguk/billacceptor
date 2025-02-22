@@ -45,7 +45,7 @@ def log_transaction(message):
     print(f"{timestamp} {message}")
 
 # 📌 Inisialisasi Flask
-app = Flask(_name_)
+app = Flask(__name__)
 
 # 📌 Variabel Global
 pulse_count = 0
@@ -277,6 +277,6 @@ def trigger_transaction():
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"})
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
