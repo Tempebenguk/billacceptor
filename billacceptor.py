@@ -210,6 +210,10 @@ def start_timeout_timer():
                 log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
             else:
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+                
+            if insufficient_payment_count >= MAX_RETRY:
+                log_transaction("🚫 Transaksi gagal 2 kali, menutup bill acceptor.")
+                pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN setelah retry habis
 
             # **🔥 Kirim status transaksi**
             send_transaction_status()
