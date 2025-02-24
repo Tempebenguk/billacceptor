@@ -109,7 +109,7 @@ def send_transaction_status():
 
         if response.status_code == 200:
             res_data = response.json()
-            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('paymentDate')}")
+            log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment date')}")
             reset_transaction()  # 🔥 Reset transaksi setelah sukses
 
         elif response.status_code == 400:
