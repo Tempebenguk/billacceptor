@@ -9,3 +9,4 @@ Endpoint = 202.169.224.6:51820           # Ganti dengan IP Publik/DNS Server
 AllowedIPs = 0.0.0.0/0                  # Untuk akses semua jaringan
 PersistentKeepalive = 25
 
+d 

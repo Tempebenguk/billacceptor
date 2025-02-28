@@ -1,0 +1,9 @@
+pty "xl2tpd -D"  # Jalankan xl2tpd sebagai daemon
+name billcleon1  # Username VPN
+password bill2025  # Password VPN
+remotename L2TP-Client  # Nama remote L2TP
+require-mschap-v2  # Gunakan autentikasi MSCHAPv2
+noccp  # Nonaktifkan kompresi CCP
+usepeerdns  # Gunakan DNS dari server VPN
+persist  # Jangan putuskan koneksi secara otomatis
+ifconfig 111.92.166.189 111.92.166.177  # IP Client & Gateway

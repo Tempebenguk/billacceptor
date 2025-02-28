@@ -1,0 +1,11 @@
+ipcp-accept-local  # Terima konfigurasi IP lokal dari server
+ipcp-accept-remote  # Terima konfigurasi IP remote dari server
+require-mschap-v2  # Gunakan autentikasi MSCHAPv2
+noccp  # Nonaktifkan kompresi CCP
+noauth  # Tidak perlu autentikasi tambahan
+mtu 1400  # Set ukuran MTU (Maximum Transmission Unit)
+mru 1400  # Set ukuran MRU (Maximum Receive Unit)
+connect-delay 5000  # Tunggu 5 detik sebelum mencoba koneksi
+usepeerdns  # Gunakan DNS dari server VPN
+defaultroute  # Gunakan VPN sebagai default route
+persist  # Pertahankan koneksi jika terputus
