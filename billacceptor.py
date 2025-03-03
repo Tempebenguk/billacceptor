@@ -254,9 +254,10 @@ def reset_transaction():
 def get_bill_acceptor_status():
     global transaction_active
     status = {
-        "Bill acceptor siap": not transaction_active,
-        "Ada transaksi aktif": transaction_active
+        "bill_acceptor_ready": not transaction_active,
+        "transaction_active": transaction_active
     }
+    
     return jsonify(status), 200
 
 # 📌 API untuk Memulai Transaksi
