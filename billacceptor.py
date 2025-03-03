@@ -250,6 +250,15 @@ def reset_transaction():
     insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
     log_transaction("🔄 Transaksi di-reset ke default.")
 
+@app.route('/api/status', methods=['GET'])
+def get_bill_acceptor_status():
+    global transaction_active
+    status = {
+        "Bill acceptor siap": not transaction_active,
+        "Ada transaksi aktif": transaction_active
+    }
+    return jsonify(status), 200
+
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
 def trigger_transaction():
