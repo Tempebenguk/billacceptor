@@ -253,12 +253,17 @@ def reset_transaction():
 @app.route('/api/status', methods=['GET'])
 def get_bill_acceptor_status():
     global transaction_active
-    status = {
-        "bill_acceptor_ready": not transaction_active,
-        "transaction_active": transaction_active
-    }
     
-    return jsonify(status), 200
+    if transaction_active:
+        return jsonify({
+            "status": "error",
+            "message": "Bill acceptor sedang dalam transaksi"
+        }), 409  # 409 (Conflict)
+
+    return jsonify({
+        "status": "success",
+        "message": "Bill acceptor siap digunakan"
+    }), 200  # 200 (OK)
 
 # 📌 API untuk Memulai Transaksi
 @app.route("/api/ba", methods=["POST"])
@@ -266,7 +271,7 @@ def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
 
     if transaction_active:
-        return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 400
+        return jsonify({"status": "error", "message": "Transaksi sedang berlangsung"}), 409
 
     data = request.json
     payment_token = data.get("paymentToken")
@@ -277,7 +282,7 @@ def trigger_transaction():
     id_trx, payment_token, product_price = fetch_invoice_details(payment_token)
 
     if id_trx is None or product_price is None:
-        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 400
+        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 404
 
     transaction_active = True
     last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
@@ -285,7 +290,7 @@ def trigger_transaction():
     pi.write(EN_PIN, 1)
     threading.Thread(target=start_timeout_timer, daemon=True).start()
 
-    return jsonify({"status": "success", "message": "Transaksi dimulai"})
+    return jsonify({"status": "success", "message": "Transaksi dimulai"}),200
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
