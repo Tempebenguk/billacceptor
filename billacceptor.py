@@ -1,11 +1,9 @@
 import pigpio
-import psutil
 import time
 import datetime
 import os
 import requests
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import threading
 
 # 📌 Konfigurasi PIN GPIO
