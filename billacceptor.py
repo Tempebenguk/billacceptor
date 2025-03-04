@@ -5,6 +5,8 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
+import psutil
+from flask_cors import CORS
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
