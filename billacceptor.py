@@ -283,7 +283,7 @@ def trigger_transaction():
 
     # 🔥 Jika ID transaksi tidak ditemukan atau harga produk tidak valid, tolak request
     if not id_trx or not product_price:
-        log_transaction(f"🚫 Token {payment_token} tidak valid atau invoice tidak ditemukan.")
+        log_transaction(f"🚫 Token {data.get("paymentToken")} tidak valid atau invoice tidak ditemukan.")
         return jsonify({"status": "error", "message": "Token pembayaran tidak valid atau invoice tidak ditemukan"}), 400
 
     transaction_active = True
