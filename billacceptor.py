@@ -5,6 +5,8 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
+import psutil
+from flask_cors import CORS
 
 # 📌 Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
@@ -46,6 +48,7 @@ def log_transaction(message):
 
 # 📌 Inisialisasi Flask
 app = Flask(__name__)
+CORS(app)
 
 # 📌 Variabel Global
 pulse_count = 0
