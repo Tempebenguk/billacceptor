@@ -48,6 +48,7 @@ def log_transaction(message):
 
 # 📌 Inisialisasi Flask
 app = Flask(__name__)
+CORS(app)
 
 # 📌 Variabel Global
 pulse_count = 0
@@ -251,6 +252,34 @@ def reset_transaction():
     last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
     insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
     log_transaction("🔄 Transaksi di-reset ke default.")
+
+@app.route('/system_stats', methods=['GET'])
+def get_system_stats():
+    cpu_percent = psutil.cpu_percent(interval=1)
+    
+    mem = psutil.virtual_memory()
+    ram_percent = mem.percent
+    ram_total = round(mem.total / (1024 ** 3), 2)
+    ram_used = round(mem.used / (1024 ** 3), 2)
+    
+    disk = psutil.disk_usage('/')
+    disk_percent = disk.percent
+    disk_total = round(disk.total / (1024 ** 3), 2)
+    disk_used = round(disk.used / (1024 ** 3), 2)
+    
+    return jsonify({
+        "cpu": cpu_percent,
+        "ram": {
+            "percent": ram_percent,
+            "used": ram_used,
+            "total": ram_total
+        },
+        "disk": {
+            "percent": disk_percent,
+            "used": disk_used,
+            "total": disk_total
+        }
+    })
 
 @app.route('/api/status', methods=['GET'])
 def get_bill_acceptor_status():
