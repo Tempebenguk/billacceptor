@@ -1,5 +1,4 @@
 import pigpio
-import psutil
 import time
 import datetime
 import os
