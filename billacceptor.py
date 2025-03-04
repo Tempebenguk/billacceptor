@@ -281,8 +281,9 @@ def trigger_transaction():
 
     id_trx, payment_token, product_price = fetch_invoice_details(payment_token)
 
-    if id_trx is None or product_price is None:
-        return jsonify({"status": "error", "message": "Invoice tidak valid atau sudah dibayar"}), 404
+    # 🔥 Jika ID transaksi tidak ditemukan atau harga produk tidak valid, tolak request
+    if not id_trx or not product_price:
+        return jsonify({"status": "error", "message": "Token pembayaran tidak valid atau invoice tidak ditemukan"}), 400
 
     transaction_active = True
     last_pulse_received_time = time.time()  # 🔥 Reset waktu timeout saat transaksi dimulai
@@ -290,8 +291,7 @@ def trigger_transaction():
     pi.write(EN_PIN, 1)
     threading.Thread(target=start_timeout_timer, daemon=True).start()
 
-    return jsonify({"status": "success", "message": "Transaksi dimulai"}),200
-
+    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     app.run(host="0.0.0.0", port=5000, debug=True)
