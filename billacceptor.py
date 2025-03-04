@@ -81,7 +81,7 @@ def fetch_invoice_details(payment_token):
 
             # 🔥 Hanya lanjutkan jika isPaid == False
             if not invoice_data.get("isPaid", False):
-                log_transaction(f"✅ Invoice {payment_token} belum dibayar, transaksi dapat dilanjutkan.")
+                log_transaction(f"✅ Invoice {payment_token} belum dibayar, transaksi dapat dilanjutkan.") #Masih muncul padahal Token tidak valid
             else:
                 log_transaction(f"🚫 Transaksi dibatalkan! Invoice {payment_token} sudah dibayar.")
                 return None, None, None
