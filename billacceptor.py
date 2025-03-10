@@ -11,7 +11,7 @@ BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
 
 # 📌 Konfigurasi transaksi
-TIMEOUT = 15
+TIMEOUT = 180
 DEBOUNCE_TIME = 0.05
 TOLERANCE = 2
 MAX_RETRY = 2  # 🔥 Maksimal ulang 2 kali
