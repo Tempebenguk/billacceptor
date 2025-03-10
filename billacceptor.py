@@ -173,7 +173,7 @@ def count_pulse(gpio, level, tick):
         pending_pulse_count += 1
         last_pulse_time = current_time
         last_pulse_received_time = current_time  # *Cooldown reset setiap pulsa masuk*
-        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
+        print(f"🔢 Pulsa diterima: {pending_pulse_count}")  # Debugging
         if timeout_thread is None or not timeout_thread.is_alive():
             timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
             timeout_thread.start()
