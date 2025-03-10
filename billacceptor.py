@@ -193,20 +193,20 @@ def start_timeout_timer():
             break  # *Hentikan loop setelah timeout*
 
         if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
-                    transaction_active = False
-                    pi.write(EN_PIN, 0)  # Matikan bill acceptor
-                    
-                    overpaid = max(0, total_inserted - product_price)  # 🔥 Ensure overpaid is set
+            transaction_active = False
+            pi.write(EN_PIN, 0)  # Matikan bill acceptor
+            
+            overpaid = max(0, total_inserted - product_price)  # 🔥 Ensure overpaid is set
 
-                    if total_inserted == product_price:
-                        log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-                    else:
-                        log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+            if total_inserted == product_price:
+                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+            else:
+                log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
 
-                    # *🔥 Kirim status transaksi*
-                    send_transaction_status()
+            # *🔥 Kirim status transaksi*
+            send_transaction_status()
 
-                    break  # *Hentikan loop setelah sukses*
+            break  # *Hentikan loop setelah sukses*s*
         
         if remaining_time == 0:
             # *🔥 Timeout tercapai, hentikan transaksi*
