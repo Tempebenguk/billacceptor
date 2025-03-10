@@ -28,7 +28,7 @@ PULSE_MAPPING = {
 }
 
 # 📌 API URL
-INVOICE_API = "https://dev.xpdisi.id/api/invoice/"
+INVOICE_API = "https://api-dev.xpdisi.id/invoice/"
 BILL_API = "https://dev.xpdisi.id/api/order/billacceptor"
 
 # 📌 Lokasi penyimpanan log transaksi
