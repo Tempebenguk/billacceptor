@@ -152,32 +152,42 @@ def closest_valid_pulse(pulses):
     """Mendapatkan jumlah pulsa yang paling mendekati nilai yang valid."""
     if pulses == 1:
         return 1
-    if 2 < pulses < 5:
+    if 2 <= pulses <=5:  # Koreksi untuk rentang 2 hingga 4 pulsa
         return 2
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
-# 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
-    global pulse_count, last_pulse_time, last_pulse_received_time, pending_pulse_count, timeout_thread
+    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, timeout_thread
 
     if not transaction_active:
         return
 
     current_time = time.time()
 
-    # Pastikan debounce
+    # Pastikan debounce untuk menghindari pembacaan ganda
     if (current_time - last_pulse_time) > DEBOUNCE_TIME:
-        if pending_pulse_count == 0:
-            pi.write(EN_PIN, 0)  # 🔥 Matikan EN_PIN saat mulai counting
-        pending_pulse_count += 1
+        pulse_count += 1
         last_pulse_time = current_time
-        last_pulse_received_time = current_time  # *Cooldown reset setiap pulsa masuk*
-        print(f"🔢 Pulsa diterima: {pending_pulse_count}")  # Debugging
-        if timeout_thread is None or not timeout_thread.is_alive():
-            timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
-            timeout_thread.start()
+        last_pulse_received_time = current_time  # Reset cooldown setiap pulsa masuk
+        print(f"🔢 Pulsa diterima: {pulse_count}")  # Debugging
+
+        # Konversi pulsa ke uang dengan koreksi pulsa
+        corrected_pulses = closest_valid_pulse(pulse_count)
+        if corrected_pulses is not None:  # Hanya lanjutkan jika pulsa valid
+            received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+            total_inserted += received_amount
+            remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
+            print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
+            log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+            
+            pulse_count = 0  # Reset count setelah log
+
+            # 🔥 Cegah multiple timeout threads
+            if timeout_thread is None or not timeout_thread.is_alive():
+                timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+                timeout_thread.start()
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
