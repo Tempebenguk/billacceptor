@@ -202,7 +202,7 @@ def start_timeout_timer():
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))  # Timeout dalam detik
         if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
                 process_final_pulse_count()
-                break  # *Hentikan loop setelah timeout*
+                continue
         if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
                 transaction_active = False
                 pi.write(EN_PIN, 0)  # Matikan bill acceptor
