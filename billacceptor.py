@@ -319,7 +319,7 @@ def trigger_transaction():
 
             if response.status_code == 200 and "data" in response_data:
                 for token_data in response_data["data"]:
-                    created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                    created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") #oke
                     created_time = created_time.replace(tzinfo=datetime.timezone.utc)  # Set timezone ke UTC
                     age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
                     
