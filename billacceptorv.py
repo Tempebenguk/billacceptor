@@ -19,7 +19,7 @@ def fetch_invoice_data():
 
 def get_valid_payment_token(data):
     """Mendapatkan PaymentToken terbaru yang usianya kurang dari 3 menit."""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)  # Pakai UTC agar cocok dengan CreatedAt
     
     for entry in data.get("data", []):
         created_at = datetime.datetime.fromisoformat(entry["CreatedAt"].replace("Z", "+00:00"))
