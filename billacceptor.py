@@ -205,12 +205,12 @@ def start_timeout_timer():
 
                 if total_inserted == product_price:
                     log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-                else:
+                else:  
                     log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
 
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
-                trigger_transaction()
+                continue
         if remaining_time == 0:
                 # *🔥 Timeout tercapai, hentikan transaksi*
                 transaction_active = False
