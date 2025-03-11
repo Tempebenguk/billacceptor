@@ -319,7 +319,7 @@ def trigger_transaction():
 
             if response.status_code == 200 and "data" in response_data:
                 for token_data in response_data["data"]:
-                    created_time = datetime.datetime.strptime(token_data["createdAt"], "%Y-%m-%d %H:%M:%S")
+                    created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%d %H:%M:%S")
                     age_in_minutes = (datetime.datetime.now() - created_time).total_seconds() / 60
                     
                     if age_in_minutes <= 3:  # Hanya ambil token yang usianya kurang dari 3 menit
