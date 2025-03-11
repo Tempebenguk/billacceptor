@@ -28,6 +28,7 @@ PULSE_MAPPING = {
 }
 
 # 📌 API URL
+TOKEN_API = "https://api-dev.xpdisi.id/invoice/device/bic01"
 INVOICE_API = "https://api-dev.xpdisi.id/invoice/"
 BILL_API = "https://api-dev.xpdisi.id/order/billacceptor"
 
@@ -312,7 +313,7 @@ def trigger_transaction():
         log_transaction("🔍 Mencari invoice yang belum dibayar...")
         
         try:
-            response = requests.get(INVOICE_API, timeout=5)
+            response = requests.get(TOKEN_API, timeout=5)
             response_data = response.json()
 
             if response.status_code == 200 and "data" in response_data:
