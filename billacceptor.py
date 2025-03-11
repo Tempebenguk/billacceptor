@@ -324,7 +324,7 @@ def trigger_transaction():
                     age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
                     
                     if age_in_minutes <= 3:  # Hanya ambil token yang usianya kurang dari 3 menit
-                        payment_token = token_data["paymentToken"]
+                        payment_token = token_data["PaymentToken"]
                         log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
                         # Ambil detail invoice berdasarkan paymentToken
