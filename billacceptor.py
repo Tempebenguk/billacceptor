@@ -210,7 +210,7 @@ def start_timeout_timer():
 
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
-                return
+                trigger_transaction()
         if remaining_time == 0:
                 # *🔥 Timeout tercapai, hentikan transaksi*
                 transaction_active = False
