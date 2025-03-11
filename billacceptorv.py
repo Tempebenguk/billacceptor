@@ -3,7 +3,7 @@ import time
 import requests
 
 # Konfigurasi API
-INVOICE_API = "http://api-dev.xpdisi.id/invoice/device/bic01"
+INVOICE_API = "https://api.dev.xpdisi.id/invoice/device/bic01"
 
 def fetch_invoice_data():
     """Mengambil data invoice dari API."""
