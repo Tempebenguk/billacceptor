@@ -310,33 +310,47 @@ def trigger_transaction():
             time.sleep(1)
             continue
 
-        log_transaction("🔍 Mencari invoice yang belum dibayar...")
+        log_transaction("🔍 Mencari payment token terbaru...")
         
         try:
+            # Ambil daftar token terbaru
             response = requests.get(TOKEN_API, timeout=5)
             response_data = response.json()
 
             if response.status_code == 200 and "data" in response_data:
-                for invoice in response_data["data"]:
-                    if not invoice.get("isPaid", False):
-                        id_trx = invoice["ID"]
-                        payment_token = invoice["paymentToken"]
-                        product_price = int(invoice["productPrice"])
-
-                        transaction_active = True
-                        last_pulse_received_time = time.time()
-                        log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
-                        pi.write(EN_PIN, 1)
-                        threading.Thread(target=start_timeout_timer, daemon=True).start()
-                        return
+                for token_data in response_data["data"]:
+                    created_time = datetime.datetime.strptime(token_data["createdAt"], "%Y-%m-%d %H:%M:%S")
+                    age_in_minutes = (datetime.datetime.now() - created_time).total_seconds() / 60
                     
-            log_transaction("✅ Tidak ada invoice yang belum dibayar. Menunggu...")
+                    if age_in_minutes <= 3:  # Hanya ambil token yang usianya kurang dari 3 menit
+                        payment_token = token_data["paymentToken"]
+                        log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+
+                        # Ambil detail invoice berdasarkan paymentToken
+                        invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
+                        invoice_data = invoice_response.json()
+
+                        if invoice_response.status_code == 200 and "data" in invoice_data:
+                            invoice = invoice_data["data"]
+                            if not invoice.get("isPaid", False):
+                                id_trx = invoice["ID"]
+                                product_price = int(invoice["productPrice"])
+
+                                transaction_active = True
+                                last_pulse_received_time = time.time()
+                                log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+                                pi.write(EN_PIN, 1)
+                                threading.Thread(target=start_timeout_timer, daemon=True).start()
+                                return
+                            else:
+                                log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
+
+            log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
             time.sleep(1)
 
         except requests.exceptions.RequestException as e:
-            log_transaction(f"⚠️ Gagal mengambil daftar invoice: {e}")
+            log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
             time.sleep(1)
-
 
     return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 if __name__ == "__main__":
