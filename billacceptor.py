@@ -297,8 +297,8 @@ def trigger_transaction():
                     
                     if age_in_minutes <= 3:  
                         payment_token = token_data["PaymentToken"]
-                        log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
-
+                        #log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+                        log_transaction(f"[DEBUG] Masuk ke fungsi cek_payment_token - {time.time()}")
                         # Ambil detail invoice berdasarkan paymentToken
                         invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
                         invoice_data = invoice_response.json()
