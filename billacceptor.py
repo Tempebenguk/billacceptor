@@ -281,7 +281,7 @@ def trigger_transaction():
     
     while True:
         if transaction_active:
-            time.sleep(2) 
+            time.sleep(5) 
             continue
 
         log_transaction("🔍 Mencari payment token terbaru...")
