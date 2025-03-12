@@ -357,5 +357,7 @@ def trigger_transaction():
     return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
+    while True:  # 🔥 Loop utama, terus mencari transaksi baru
+        trigger_transaction()  # Cari transaksi baru
+        time.sleep(1)  # Beri jeda kecil untuk menghindari loop tanpa henti
