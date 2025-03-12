@@ -57,6 +57,7 @@ insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
 trigger_transaction_event = threading.Event()
+processed_tokens = set()
 
 # Fungsi log transaction
 def log_transaction(message):
@@ -287,14 +288,13 @@ def get_bill_acceptor_status():
         "message": "Bill acceptor siap digunakan"
     }), 200 
 def trigger_transaction():
-    """Thread untuk mendeteksi transaksi dan menyalakan bill acceptor jika ada invoice."""
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
 
     if trigger_transaction_event.is_set():
         log_transaction("[DEBUG] Thread trigger_transaction sudah berjalan, tidak membuat ulang.")
         return
 
-    trigger_transaction_event.set()  # Tandai bahwa thread sedang berjalan
+    trigger_transaction_event.set()  
 
     while True:
         if transaction_active:
@@ -302,7 +302,6 @@ def trigger_transaction():
             time.sleep(5)
             continue
 
-        log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
         log_transaction("🔍 Mencari payment token terbaru...")
 
         try:
@@ -315,8 +314,14 @@ def trigger_transaction():
                     created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
                     age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
 
+                    payment_token = token_data["PaymentToken"]
+
+                    # Cek apakah token sudah diproses sebelumnya
+                    if payment_token in processed_tokens:
+                        log_transaction(f"⚠️ Token {payment_token} sudah diproses, mencari lagi...")
+                        continue  # Lewati token ini
+
                     if age_in_minutes <= 3:  
-                        payment_token = token_data["PaymentToken"]
                         log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
                         invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
@@ -329,25 +334,27 @@ def trigger_transaction():
                                 product_price = int(invoice["productPrice"])
 
                                 transaction_active = True
-                                pending_pulse_count = 0 
+                                pending_pulse_count = 0  
                                 last_pulse_received_time = time.time()
                                 log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+
+                                processed_tokens.add(payment_token)  # Simpan token yang diproses
                                 pi.write(EN_PIN, 1)
                                 start_timeout_timer()
                                 return
                             else:
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
-            log_transaction("[DEBUG] Tidak ada token, tidur selama 5 detik...")
+            log_transaction("[DEBUG] Tidak ada token baru, tidur selama 5 detik...")
             time.sleep(5)
 
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ ERROR: {e}")
-            log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
             time.sleep(1)
 
         finally:
-            trigger_transaction_event.clear()  # Tandai thread selesai
+            trigger_transaction_event.clear()
+
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
