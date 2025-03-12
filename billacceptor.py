@@ -276,14 +276,16 @@ def get_bill_acceptor_status():
         "message": "Bill acceptor siap digunakan"
     }), 200 
 def trigger_transaction():
+    time.sleep(2)  # Tambahkan delay sebelum loop mulai, mencegah race condition
+
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
-    
+
     while True:
         if transaction_active:
             log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
             time.sleep(5)
             continue
-
+        
         log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
         log_transaction("🔍 Mencari payment token terbaru...")
 
