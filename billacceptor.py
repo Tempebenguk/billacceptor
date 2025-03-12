@@ -57,7 +57,6 @@ timeout_thread = None
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
-trigger_lock = threading.Lock()
 
 # Inisialisasi pigpio
 pi = pigpio.pi()
