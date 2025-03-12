@@ -57,6 +57,8 @@ timeout_thread = None
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
+transaction_thread = None
+thread_lock = threading.Lock()
 
 # Inisialisasi pigpio
 pi = pigpio.pi()
@@ -275,9 +277,11 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
-def trigger_transaction():
+
+def transaction_worker():
+    """Worker untuk mencari token dan memulai transaksi."""
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
-    
+
     while True:
         if transaction_active:
             log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
@@ -328,6 +332,18 @@ def trigger_transaction():
             log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
             time.sleep(1)
 
+def trigger_transaction():
+    """Memastikan hanya satu thread trigger_transaction yang berjalan."""
+    global transaction_thread
+
+    with thread_lock:
+        if transaction_thread and transaction_thread.is_alive():
+            log_transaction("[DEBUG] trigger_transaction sudah berjalan, tidak membuat yang baru.")
+            return
+        
+        log_transaction("[DEBUG] Memulai thread trigger_transaction")
+        transaction_thread = threading.Thread(target=transaction_worker, daemon=True)
+        transaction_thread.start()
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
