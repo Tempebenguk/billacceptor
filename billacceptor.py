@@ -60,6 +60,7 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
+transaction_done = threading.Event()
 
 
 # 📌 Inisialisasi pigpio
@@ -211,6 +212,8 @@ def start_timeout_timer():
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
                 reset_transaction()
+                transaction_done.set()
+                return
         if remaining_time == 0:
                 # *🔥 Timeout tercapai, hentikan transaksi*
                 transaction_active = False
@@ -229,7 +232,8 @@ def start_timeout_timer():
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
                 reset_transaction()
-                break  # *Hentikan loop setelah timeout*
+                transaction_done.set()
+                return # *Hentikan loop setelah timeout*
 
         # *Tampilkan waktu timeout di terminal*
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
@@ -359,3 +363,14 @@ if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
+    while True:
+        transaction_done.clear()  # Reset event sebelum memulai transaksi baru
+
+        # Mulai transaksi (kode ini bisa berbeda tergantung implementasi kamu)
+        print("🟢 Menunggu transaksi baru...")
+        transaction_active = True
+        total_inserted = 0  # Reset jumlah uang yang masuk
+
+        # Jalankan timer di thread terpisah
+        threading.Thread(target=start_timeout_timer, daemon=True).start()
+
