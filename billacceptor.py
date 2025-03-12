@@ -357,7 +357,6 @@ def trigger_transaction():
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
             time.sleep(1)
-        return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
