@@ -129,7 +129,7 @@ def send_transaction_status():
                     pi.write(EN_PIN, 1)  
                 else:
                     log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Silakan lanjutkan memasukkan uang...")
-                    #last_pulse_received_time = time.time()
+                    last_pulse_received_time = time.time()
                     transaction_active = True  
                     pi.write(EN_PIN, 1)  
                     start_timeout_timer()  
