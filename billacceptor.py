@@ -357,20 +357,18 @@ def trigger_transaction():
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
             time.sleep(1)
+        return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 
-    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
-    while True:
-        transaction_done.clear()  # Reset event sebelum memulai transaksi baru
+while True:
+    transaction_done.clear()  # Reset event sebelum memulai transaksi baru
 
-        # Mulai transaksi (kode ini bisa berbeda tergantung implementasi kamu)
-        print("🟢 Menunggu transaksi baru...")
-        transaction_active = True
-        total_inserted = 0  # Reset jumlah uang yang masuk
-
-        # Jalankan timer di thread terpisah
-        threading.Thread(target=start_timeout_timer, daemon=True).start()
-
+    # Mulai transaksi (kode ini bisa berbeda tergantung implementasi kamu)
+    print("🟢 Menunggu transaksi baru...")
+    transaction_active = True
+    total_inserted = 0  # Reset jumlah uang yang masuk
+    # Jalankan timer di thread terpisah
+    threading.Thread(target=start_timeout_timer, daemon=True).start()
