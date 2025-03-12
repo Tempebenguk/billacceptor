@@ -11,7 +11,7 @@ BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
 
 # Konfigurasi transaksi
-TIMEOUT = 180
+TIMEOUT = 15
 DEBOUNCE_TIME = 0.05
 TOLERANCE = 2
 MAX_RETRY = 1 
@@ -137,7 +137,7 @@ def send_transaction_status():
                     transaction_active = True  
                     pi.write(EN_PIN, 1)  
                     start_timeout_timer()
-
+                    #COOLDOWN DOUBle
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
