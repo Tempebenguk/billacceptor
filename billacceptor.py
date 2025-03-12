@@ -53,6 +53,7 @@ payment_token = None
 product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None 
+timeout_event = threading.Event()  # Untuk memastikan hanya ada satu timeout yang berjalan
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
@@ -192,19 +193,27 @@ def count_pulse(gpio, level, tick):
 
 # Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    """Timer yang memastikan transaksi memiliki batas waktu."""
-    global total_inserted, product_price, transaction_active, last_pulse_received_time, timeout_thread
+    """Memulai timer timeout hanya jika belum berjalan."""
+    global timeout_thread
 
     with transaction_lock:
-        if timeout_thread and timeout_thread.is_alive():
-            return  # Jangan buat thread baru jika sudah ada
+        if timeout_event.is_set():
+            return  # Jika sudah berjalan, jangan mulai lagi
+
+        timeout_event.set()  # Tandai bahwa timeout sedang berjalan
 
         timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
         timeout_thread.start()
 
+
 def run_timeout_timer():
     """Thread timeout yang berjalan selama transaksi berlangsung."""
     global transaction_active, total_inserted, product_price, last_pulse_received_time, pending_pulse_count
+
+    if timeout_event.is_set():
+        return  # Jika timeout sudah berjalan, jangan mulai lagi
+    
+    timeout_event.set()  # Tandai bahwa timeout berjalan
 
     while transaction_active:
         current_time = time.time()
@@ -219,7 +228,7 @@ def run_timeout_timer():
         if total_inserted >= product_price:
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi
-
+            
             overpaid = max(0, total_inserted - product_price)
 
             if total_inserted == product_price:
@@ -228,8 +237,9 @@ def run_timeout_timer():
                 log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
 
             send_transaction_status()
+            timeout_event.clear()  # Reset event setelah selesai
             trigger_transaction()
-            break  # Keluar dari loop setelah transaksi selesai
+            return  # Keluar dari thread setelah transaksi selesai
 
         # Timeout: transaksi gagal
         if remaining_time == 0:
@@ -247,11 +257,13 @@ def run_timeout_timer():
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
 
             send_transaction_status()
-            break  # Keluar setelah timeout
+            timeout_event.clear()  # Reset event setelah selesai
+            return  # Keluar setelah timeout
 
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
-
+    
+    timeout_event.clear()  # Reset event jika loop keluar
 def process_final_pulse_count():
     """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
     global pending_pulse_count, total_inserted, pulse_count
