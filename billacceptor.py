@@ -277,55 +277,54 @@ def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
     
     while True:
-        with transaction_lock:  # Lock diaktifkan untuk mencegah thread lain mengakses kode ini bersamaan
-            if transaction_active:
-                log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
-                time.sleep(5)
-                continue
+        if transaction_active:
+            log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
+            time.sleep(5)
+            continue
 
-            log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
-            log_transaction("🔍 Mencari payment token terbaru...")
+        log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
+        log_transaction("🔍 Mencari payment token terbaru...")
 
-            try:
-                response = requests.get(TOKEN_API, timeout=5)
-                response_data = response.json()
+        try:
+            response = requests.get(TOKEN_API, timeout=5)
+            response_data = response.json()
 
-                if response.status_code == 200 and "data" in response_data:
-                    for token_data in response_data["data"]:
-                        created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") 
-                        created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
-                        age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
+            if response.status_code == 200 and "data" in response_data:
+                for token_data in response_data["data"]:
+                    created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") 
+                    created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
+                    age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
 
-                        if age_in_minutes <= 3:  
-                            payment_token = token_data["PaymentToken"]
-                            log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+                    if age_in_minutes <= 3:  
+                        payment_token = token_data["PaymentToken"]
+                        log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
-                            invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
-                            invoice_data = invoice_response.json()
+                        invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
+                        invoice_data = invoice_response.json()
 
-                            if invoice_response.status_code == 200 and "data" in invoice_data:
-                                invoice = invoice_data["data"]
-                                if not invoice.get("isPaid", False):
-                                    id_trx = invoice["ID"]
-                                    product_price = int(invoice["productPrice"])
+                        if invoice_response.status_code == 200 and "data" in invoice_data:
+                            invoice = invoice_data["data"]
+                            if not invoice.get("isPaid", False):
+                                id_trx = invoice["ID"]
+                                product_price = int(invoice["productPrice"])
 
-                                    transaction_active = True
-                                    pending_pulse_count = 0 
-                                    last_pulse_received_time = time.time()
-                                    log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
-                                    pi.write(EN_PIN, 1)
-                                    threading.Thread(target=start_timeout_timer, daemon=True).start()
-                                    return
-                                else:
-                                    log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
+                                transaction_active = True
+                                pending_pulse_count = 0 
+                                last_pulse_received_time = time.time()
+                                log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+                                pi.write(EN_PIN, 1)
+                                threading.Thread(target=start_timeout_timer, daemon=True).start()
+                                return
+                            else:
+                                log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
-                log_transaction("[DEBUG] Tidak ada token, tidur selama 5 detik...")
-                time.sleep(5)
+            log_transaction("[DEBUG] Tidak ada token, tidur selama 5 detik...")
+            time.sleep(5)
 
-            except requests.exceptions.RequestException as e:
-                log_transaction(f"⚠️ ERROR: {e}")
-                log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
-                time.sleep(1)
+        except requests.exceptions.RequestException as e:
+            log_transaction(f"⚠️ ERROR: {e}")
+            log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
+            time.sleep(1)
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
