@@ -62,7 +62,6 @@ timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
 transaction_done = threading.Event()
 
-
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
 if not pi.connected:
@@ -172,20 +171,57 @@ def count_pulse(gpio, level, tick):
         if timeout_thread is None or not timeout_thread.is_alive():
             timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
             timeout_thread.start()
-        # # Konversi pulsa ke uang dengan koreksi pulsa
-        # corrected_pulses = closest_valid_pulse(pulse_count)
-        # if corrected_pulses:
-        #     received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-        #     total_inserted += received_amount
-        #     remaining_due = max(product_price - total_inserted, 0)  # 🔥 Sisa tagihan
-        #     print(f"\r💰 Total uang masuk: Rp.{total_inserted}", end="")
-        #     log_transaction(f"💰 Uang masuk: Rp.{received_amount} | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
-        #     pulse_count = 0  # Reset count setelah log
 
-        #     # 🔥 Cegah multiple timeout threads
-        #     if timeout_thread is None or not timeout_thread.is_alive():
-        #         timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
-        #         timeout_thread.start()
+def process_final_pulse_count():
+    """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
+    global pending_pulse_count, total_inserted, pulse_count
+
+    if pending_pulse_count == 0:
+        return
+
+    # 🔥 Koreksi pulsa dengan toleransi ±2
+    corrected_pulses = closest_valid_pulse(pending_pulse_count)
+
+    if corrected_pulses:
+        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+        total_inserted += received_amount
+        remaining_due = max(product_price - total_inserted, 0)
+
+        log_transaction(f"💰 Koreksi pulsa: {pending_pulse_count} -> {corrected_pulses} ({received_amount}) | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+    
+    else:
+        log_transaction(f"⚠️ Pulsa {pending_pulse_count} tidak valid!")
+
+    pending_pulse_count = 0  # Reset setelah diproses
+    pi.write(EN_PIN, 1)  # 🔥 Hidupkan kembali EN_PIN setelah koreksi
+    print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
+
+# 📌 Reset transaksi setelah selesai
+def reset_transaction():
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count
+    transaction_active = False
+    total_inserted = 0
+    id_trx = None
+    payment_token = None
+    product_price = 0
+    last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
+    insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
+    log_transaction("🔄 Transaksi di-reset ke default.")
+
+@app.route('/api/status', methods=['GET'])
+def get_bill_acceptor_status():
+    global transaction_active
+    
+    if transaction_active:
+        return jsonify({
+            "status": "error",
+            "message": "Bill acceptor sedang dalam transaksi"
+        }), 409  # 409 (Conflict)
+
+    return jsonify({
+        "status": "success",
+        "message": "Bill acceptor siap digunakan"
+    }), 200  # 200 (OK)
 
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
@@ -238,73 +274,6 @@ def start_timeout_timer():
         # *Tampilkan waktu timeout di terminal*
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
-
-        # # *🔥 Cek apakah cukup uang setelah 2 detik tanpa pulsa tambahan*
-        # if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
-        #     transaction_active = False
-        #     pi.write(EN_PIN, 0)  # Matikan bill acceptor
-            
-        #     overpaid = max(0, total_inserted - product_price)  # 🔥 Ensure overpaid is set
-
-        #     if total_inserted == product_price:
-        #         log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-        #     else:
-        #         log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
-
-        #     # *🔥 Kirim status transaksi*
-        #     send_transaction_status()
-
-        #     break  # *Hentikan loop setelah sukses*
-def process_final_pulse_count():
-    """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
-    global pending_pulse_count, total_inserted, pulse_count
-
-    if pending_pulse_count == 0:
-        return
-
-    # 🔥 Koreksi pulsa dengan toleransi ±2
-    corrected_pulses = closest_valid_pulse(pending_pulse_count)
-
-    if corrected_pulses:
-        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
-        total_inserted += received_amount
-        remaining_due = max(product_price - total_inserted, 0)
-
-        log_transaction(f"💰 Koreksi pulsa: {pending_pulse_count} -> {corrected_pulses} ({received_amount}) | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
-    
-    else:
-        log_transaction(f"⚠️ Pulsa {pending_pulse_count} tidak valid!")
-
-    pending_pulse_count = 0  # Reset setelah diproses
-    pi.write(EN_PIN, 1)  # 🔥 Hidupkan kembali EN_PIN setelah koreksi
-    print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
-
-# 📌 Reset transaksi setelah selesai
-def reset_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count
-    transaction_active = False
-    total_inserted = 0
-    id_trx = None
-    payment_token = None
-    product_price = 0
-    last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
-    insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
-    log_transaction("🔄 Transaksi di-reset ke default.")
-
-@app.route('/api/status', methods=['GET'])
-def get_bill_acceptor_status():
-    global transaction_active
-    
-    if transaction_active:
-        return jsonify({
-            "status": "error",
-            "message": "Bill acceptor sedang dalam transaksi"
-        }), 409  # 409 (Conflict)
-
-    return jsonify({
-        "status": "success",
-        "message": "Bill acceptor siap digunakan"
-    }), 200  # 200 (OK)
 
 # 📌 API untuk Memulai Transaksi
 def trigger_transaction():
@@ -362,12 +331,3 @@ if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
-while True:
-    transaction_done.clear()  # Reset event sebelum memulai transaksi baru
-
-    # Mulai transaksi (kode ini bisa berbeda tergantung implementasi kamu)
-    print("🟢 Menunggu transaksi baru...")
-    transaction_active = True
-    total_inserted = 0  # Reset jumlah uang yang masuk
-    # Jalankan timer di thread terpisah
-    threading.Thread(target=start_timeout_timer, daemon=True).start()
