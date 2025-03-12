@@ -5,7 +5,7 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
-#sisa  double print aja
+
 # Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
