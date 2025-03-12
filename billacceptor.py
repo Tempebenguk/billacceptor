@@ -39,6 +39,12 @@ LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
+def log_transaction(message):
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    with open(LOG_FILE, "a") as log:
+        log.write(f"{timestamp} {message}\n")
+    print(f"{timestamp} {message}")
+
 # 📌 Inisialisasi Flask
 app = Flask(__name__)
 
@@ -54,8 +60,7 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
-transaction_lock = threading.Lock()
-log_lock = threading.Lock()
+transaction_lock = threading.Lock()  # Menambahkan Lock
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -67,13 +72,6 @@ pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
-
-def log_transaction(message):
-    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    with log_lock:
-        with open(LOG_FILE, "a") as log:
-            log.write(f"{timestamp} {message}\n")
-    print(f"{timestamp} {message}")
 
 # 📌 Fungsi GET ke API Invoice
 def fetch_invoice_details():
@@ -234,6 +232,7 @@ def start_timeout_timer():
                     send_transaction_status()
 
                     break  # *Hentikan loop setelah timeout*
+
             # *Tampilkan waktu timeout di terminal*
             print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
             time.sleep(1)
@@ -265,16 +264,15 @@ def process_final_pulse_count():
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count, pending_pulse_count
-    with transaction_lock:  # Pastikan hanya satu thread yang mengakses transaksi
-        transaction_active = False
-        total_inserted = 0
-        id_trx = None
-        payment_token = None
-        product_price = 0
-        last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
-        insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
-        pending_pulse_count = 0  # 🔥 Reset pending pulse count agar tidak terhitung dobel
-        log_transaction("🔄 Transaksi di-reset ke default.")
+    transaction_active = False
+    total_inserted = 0
+    id_trx = None
+    payment_token = None
+    product_price = 0
+    last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
+    insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
+    pending_pulse_count = 0  # 🔥 Reset pending pulse count agar tidak terhitung dobel
+    log_transaction("🔄 Transaksi di-reset ke default.")
 
 @app.route('/api/status', methods=['GET'])
 def get_bill_acceptor_status():
@@ -293,60 +291,56 @@ def get_bill_acceptor_status():
 
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
-
+    
     while True:
-        with transaction_lock:  # Ensure only one thread accesses the transaction at a time
-            if transaction_active:
-                time.sleep(1) 
-                continue
+        if transaction_active:
+            time.sleep(1) 
+            continue
 
-            log_transaction("🔍 Mencari payment token terbaru...")
+        log_transaction("🔍 Mencari payment token terbaru...")
+        
+        try:
+            # Ambil daftar token terbaru
+            response = requests.get(TOKEN_API, timeout=5)
+            response_data = response.json()
 
-            try:
-                # Fetch the latest payment tokens
-                response = requests.get(TOKEN_API, timeout=5)
-                response_data = response.json()
+            if response.status_code == 200 and "data" in response_data:
+                for token_data in response_data["data"]:
+                    created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") #oke
+                    created_time = created_time.replace(tzinfo=datetime.timezone.utc)  # Set timezone ke UTC
+                    age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
+                    
+                    if age_in_minutes <= 3:  # Hanya ambil token yang usianya kurang dari 3 menit
+                        payment_token = token_data["PaymentToken"]
+                        log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
-                if response.status_code == 200 and "data" in response_data:
-                    for token_data in response_data["data"]:
-                        created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
-                        created_time = created_time.replace(tzinfo=datetime.timezone.utc)  # Set timezone to UTC
-                        age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
-                        
-                        if age_in_minutes <= 3:  # Only process tokens younger than 3 minutes
-                            payment_token = token_data["PaymentToken"]
-                            log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+                        # Ambil detail invoice berdasarkan paymentToken
+                        invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
+                        invoice_data = invoice_response.json()
 
-                            # Fetch invoice details based on paymentToken
-                            invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
-                            invoice_data = invoice_response.json()
+                        if invoice_response.status_code == 200 and "data" in invoice_data:
+                            invoice = invoice_data["data"]
+                            if not invoice.get("isPaid", False):
+                                id_trx = invoice["ID"]
+                                product_price = int(invoice["productPrice"])
 
-                            if invoice_response.status_code == 200 and "data" in invoice_data:
-                                invoice = invoice_data["data"]
-                                if not invoice.get("isPaid", False):
-                                    id_trx = invoice["ID"]
-                                    product_price = int(invoice["productPrice"])
+                                transaction_active = True
+                                pending_pulse_count = 0  # 🔥 Reset pending pulse count saat transaksi baru dimulai
+                                last_pulse_received_time = time.time()
+                                log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+                                pi.write(EN_PIN, 1)
+                                threading.Thread(target=start_timeout_timer, daemon=True).start()
+                                return
+                            else:
+                                log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
-                                    # Mark transaction as active and reset counters
-                                    transaction_active = True
-                                    pending_pulse_count = 0  # Reset pending pulse count when a new transaction starts
-                                    last_pulse_received_time = time.time()
-                                    log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
-
-                                    # Trigger hardware to indicate transaction started
-                                    pi.write(EN_PIN, 1)
-
-                                    # Start the timeout timer in a separate thread
-                                    threading.Thread(target=start_timeout_timer, daemon=True).start()
-                                    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
-                                else:
-                                    log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
-                else:
-                    log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
-
-            except requests.exceptions.RequestException as e:
-                log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
+            log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
             time.sleep(1)
+
+        except requests.exceptions.RequestException as e:
+            log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
+            time.sleep(1)
+    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
