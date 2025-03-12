@@ -57,8 +57,6 @@ timeout_thread = None
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
-transaction_thread = None
-thread_lock = threading.Lock()
 
 # Inisialisasi pigpio
 pi = pigpio.pi()
@@ -180,12 +178,106 @@ def count_pulse(gpio, level, tick):
             timeout_thread.start()
 
 # Fungsi untuk menangani timeout & pembayaran sukses
-def transaction_worker():
-    """Worker untuk mencari token dan memulai transaksi."""
+
+def start_timeout_timer():
+    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
+
+    with transaction_lock: 
+        while transaction_active:
+            current_time = time.time()
+            remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time))) 
+            if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
+                    process_final_pulse_count()
+                    continue
+            if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
+                    transaction_active = False
+                    pi.write(EN_PIN, 0)  
+
+                    overpaid = max(0, total_inserted - product_price) 
+
+                    if total_inserted == product_price:
+                        log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+                    else:
+                        log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+
+                    # Kirim status transaksi
+                    send_transaction_status()
+                    trigger_transaction()
+            if remaining_time == 0:
+                    # imeout tercapai, hentikan transaksi
+                    transaction_active = False
+                    pi.write(EN_PIN, 0) 
+
+                    remaining_due = max(0, product_price - total_inserted)
+                    overpaid = max(0, total_inserted - product_price) 
+
+                    if total_inserted < product_price:
+                        log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
+                    elif total_inserted == product_price:
+                        log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
+                    else:
+                        log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+
+                    send_transaction_status()
+                    break 
+
+            print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
+            time.sleep(1)
+
+def process_final_pulse_count():
+    """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
+    global pending_pulse_count, total_inserted, pulse_count
+
+    if pending_pulse_count == 0:
+        return
+
+    # Koreksi pulsa dengan toleransi ±2
+    corrected_pulses = closest_valid_pulse(pending_pulse_count)
+
+    if corrected_pulses:
+        received_amount = PULSE_MAPPING.get(corrected_pulses, 0)
+        total_inserted += received_amount
+        remaining_due = max(product_price - total_inserted, 0)
+
+        log_transaction(f"💰 Koreksi pulsa: {pending_pulse_count} -> {corrected_pulses} ({received_amount}) | Total: Rp.{total_inserted} | Sisa: Rp.{remaining_due}")
+    
+    else:
+        log_transaction(f"⚠️ Pulsa {pending_pulse_count} tidak valid!")
+
+    pending_pulse_count = 0  # Reset setelah diproses
+    pi.write(EN_PIN, 1)  # Hidupkan kembali EN_PIN setelah koreksi
+    print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
+
+# Reset transaksi setelah selesai
+def reset_transaction():
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count, pending_pulse_count
+    transaction_active = False
+    total_inserted = 0
+    id_trx = None
+    payment_token = None
+    product_price = 0
+    last_pulse_received_time = time.time()  
+    insufficient_payment_count = 0  
+    pending_pulse_count = 0  
+    log_transaction("🔄 Transaksi di-reset ke default.")
+
+@app.route('/api/status', methods=['GET'])
+def get_bill_acceptor_status():
+    global transaction_active
+    
+    if transaction_active:
+        return jsonify({
+            "status": "error",
+            "message": "Bill acceptor sedang dalam transaksi"
+        }), 409 
+
+    return jsonify({
+        "status": "success",
+        "message": "Bill acceptor siap digunakan"
+    }), 200 
+def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
-
-    log_transaction("[DEBUG] transaction_worker dimulai!")  # Log saat thread mulai
-
+    
     while True:
         if transaction_active:
             log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
@@ -224,8 +316,7 @@ def transaction_worker():
                                 log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
                                 pi.write(EN_PIN, 1)
                                 threading.Thread(target=start_timeout_timer, daemon=True).start()
-                                continue  # Jaga loop tetap berjalan
-
+                                return
                             else:
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
@@ -237,29 +328,6 @@ def transaction_worker():
             log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
             time.sleep(1)
 
-def monitor_transaction_thread():
-    """Monitor dan restart thread jika mati."""
-    global transaction_thread
-    while True:
-        with thread_lock:
-            if transaction_thread is None or not transaction_thread.is_alive():
-                log_transaction("[DEBUG] Thread mati, memulai ulang trigger_transaction...")
-                transaction_thread = threading.Thread(target=transaction_worker, daemon=True)
-                transaction_thread.start()
-        time.sleep(2)  # Cek setiap 2 detik
-
-def trigger_transaction():
-    """Pastikan hanya satu thread yang berjalan."""
-    global transaction_thread
-
-    with thread_lock:
-        if transaction_thread and transaction_thread.is_alive():
-            log_transaction("[DEBUG] trigger_transaction sudah berjalan, tidak membuat yang baru.")
-            return
-        
-        log_transaction("[DEBUG] Memulai thread trigger_transaction")
-        transaction_thread = threading.Thread(target=transaction_worker, daemon=True)
-        transaction_thread.start()
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
