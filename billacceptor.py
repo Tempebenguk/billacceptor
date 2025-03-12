@@ -301,6 +301,8 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
+def check_threads():
+    log_transaction(f"[DEBUG] 🔍 Daftar thread aktif: {[t.name for t in threading.enumerate()]}")
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
 
@@ -387,3 +389,4 @@ if __name__ == "__main__":
         transaction_thread = threading.Thread(target=trigger_transaction, daemon=True, name="TransactionThread")
         transaction_thread.start()
     app.run(host="0.0.0.0", port=5000, debug=True)
+    check_threads()
