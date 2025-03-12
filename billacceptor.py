@@ -275,17 +275,18 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
-
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
     
     while True:
         if transaction_active:
-            time.sleep(5) 
+            log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
+            time.sleep(5)
             continue
 
+        log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
         log_transaction("🔍 Mencari payment token terbaru...")
-        
+
         try:
             response = requests.get(TOKEN_API, timeout=5)
             response_data = response.json()
@@ -295,13 +296,11 @@ def trigger_transaction():
                     created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") 
                     created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
                     age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
-                    
+
                     if age_in_minutes <= 3:  
                         payment_token = token_data["PaymentToken"]
-                        #log_transaction(f"✅ Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
-                        log_transaction(f"[DEBUG] Masuk ke fungsi cek_payment_token - {time.time()}")
-                        print(f"Jumlah proses: {len(psutil.pids())}")
-                        # Ambil detail invoice berdasarkan paymentToken
+                        log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+
                         invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
                         invoice_data = invoice_response.json()
 
@@ -321,18 +320,22 @@ def trigger_transaction():
                             else:
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
-            log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
+            log_transaction("[DEBUG] Tidak ada token, tidur selama 5 detik...")
             time.sleep(5)
 
         except requests.exceptions.RequestException as e:
-            log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
+            log_transaction(f"⚠️ ERROR: {e}")
+            log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
             time.sleep(1)
-    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
+
     if not any(thread.name == "TransactionThread" for thread in threading.enumerate()):
+        log_transaction("[DEBUG] Memulai thread trigger_transaction")
         transaction_thread = threading.Thread(target=trigger_transaction, daemon=True, name="TransactionThread")
         transaction_thread.start()
-    #threading.Thread(target=trigger_transaction, daemon=True).start()
+    else:
+        log_transaction("[DEBUG] Thread trigger_transaction sudah berjalan, tidak membuat ulang.")
+
     app.run(host="0.0.0.0", port=5000, debug=True)
