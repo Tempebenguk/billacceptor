@@ -126,13 +126,18 @@ def send_transaction_status():
                 if insufficient_payment_count > MAX_RETRY:
                     log_transaction("🚫 Pembayaran kurang dan telah melebihi batas retry, transaksi dibatalkan!")
                     reset_transaction()
-                    pi.write(EN_PIN, 1)  
+                    pi.write(EN_PIN, 1)
+                    
+                    # Tambahkan pemanggilan untuk mencari token baru
+                    log_transaction("🔄 Kembali mencari token baru setelah transaksi gagal...")
+                    trigger_transaction()
                 else:
                     log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Silakan lanjutkan memasukkan uang...")
                     last_pulse_received_time = time.time()
                     transaction_active = True  
                     pi.write(EN_PIN, 1)  
-                    start_timeout_timer()  
+                    start_timeout_timer()
+
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
@@ -244,7 +249,7 @@ def run_timeout_timer():
             send_transaction_status()
             break  # Keluar setelah timeout
 
-        log_transaction(f"⏳ Timeout dalam {remaining_time} detik...")
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
 def process_final_pulse_count():
