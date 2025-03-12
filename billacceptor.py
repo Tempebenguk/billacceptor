@@ -5,7 +5,7 @@ import os
 import requests
 from flask import Flask, request, jsonify
 import threading
-
+#sisa  double print aja
 # Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
@@ -298,14 +298,6 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
-import time
-import datetime
-import requests
-
-import time
-import datetime
-import requests
-
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
 
