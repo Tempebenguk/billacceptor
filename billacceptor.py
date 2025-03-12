@@ -291,6 +291,10 @@ import time
 import datetime
 import requests
 
+import time
+import datetime
+import requests
+
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
 
@@ -300,7 +304,12 @@ def trigger_transaction():
 
     trigger_transaction_event.set()
 
-    while not transaction_active:  # Pastikan tidak ada transaksi aktif sebelum mencari token baru
+    while True:
+        if transaction_active:
+            log_transaction("[DEBUG] Transaksi sedang berlangsung, menunggu transaksi selesai...")
+            time.sleep(3)
+            continue
+
         log_transaction("🔍 Mencari payment token terbaru...")
 
         try:
@@ -315,12 +324,10 @@ def trigger_transaction():
 
                     payment_token = token_data["PaymentToken"]
 
-                    # Cek apakah transaksi masih aktif (mencegah token diproses ulang)
                     if transaction_active:
-                        log_transaction("⚠️ Transaksi masih berlangsung, tidak mengambil token baru.")
+                        log_transaction("[DEBUG] Transaksi masih aktif, menunggu...")
                         return  
 
-                    # Cek apakah token sudah diproses sebelumnya
                     if payment_token in processed_tokens:
                         log_transaction(f"⚠️ Token {payment_token} sudah diproses, tidur 3 detik sebelum mencari lagi...")
                         time.sleep(3)
@@ -357,8 +364,9 @@ def trigger_transaction():
             log_transaction(f"⚠️ ERROR: {e}")
             time.sleep(1)
 
-    trigger_transaction_event.clear()  # Pastikan thread flag dilepas setelah selesai
-
+        finally:
+            trigger_transaction_event.clear()  # Hapus event agar bisa mencari token baru
+            log_transaction("[DEBUG] Thread trigger_transaction selesai, kembali mencari token.")
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
