@@ -199,19 +199,21 @@ def start_timeout_timer():
 
 def run_timeout_timer():
     """Thread timeout yang berjalan selama transaksi berlangsung."""
-    global transaction_active, total_inserted, product_price, last_pulse_received_time
+    global transaction_active, total_inserted, product_price, last_pulse_received_time, pending_pulse_count
 
     while transaction_active:
         current_time = time.time()
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))
 
+        # Proses pulsa jika tidak ada pulsa baru selama 2 detik
         if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
             process_final_pulse_count()
-            continue
+            continue  # Lanjutkan loop setelah pemrosesan
 
+        # Jika jumlah uang cukup, transaksi selesai
         if total_inserted >= product_price:
             transaction_active = False
-            pi.write(EN_PIN, 0)
+            pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi
 
             overpaid = max(0, total_inserted - product_price)
 
@@ -222,8 +224,9 @@ def run_timeout_timer():
 
             send_transaction_status()
             trigger_transaction()
-            return  # Keluar dari loop setelah transaksi selesai
+            break  # Keluar dari loop setelah transaksi selesai
 
+        # Timeout: transaksi gagal
         if remaining_time == 0:
             transaction_active = False
             pi.write(EN_PIN, 0)
@@ -239,9 +242,9 @@ def run_timeout_timer():
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
 
             send_transaction_status()
-            return  # Keluar setelah timeout
+            break  # Keluar setelah timeout
 
-        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
+        log_transaction(f"⏳ Timeout dalam {remaining_time} detik...")
         time.sleep(1)
 
 def process_final_pulse_count():
@@ -266,7 +269,7 @@ def process_final_pulse_count():
 
     pending_pulse_count = 0  # Reset setelah diproses
     pi.write(EN_PIN, 1)  # Hidupkan kembali EN_PIN setelah koreksi
-    print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
+    log_transaction("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
 
 # Reset transaksi setelah selesai
 def reset_transaction():
