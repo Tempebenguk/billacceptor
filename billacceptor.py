@@ -60,7 +60,6 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
-transaction_done = threading.Event()
 
 
 # 📌 Inisialisasi pigpio
@@ -100,7 +99,7 @@ def send_transaction_status():
         response = requests.post(BILL_API, json={
             "ID": id_trx,
             "paymentToken": payment_token,
-            "productPrice": total_inserted  # Hanya mengirim total uang yang masuk
+            "productPrice": total_inserted
         }, timeout=5)
 
         if response.status_code == 200:
@@ -141,6 +140,7 @@ def send_transaction_status():
 
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠️ Gagal mengirim status transaksi: {e}")
+    reset_transaction()
         
 def closest_valid_pulse(pulses):
     """Mendapatkan jumlah pulsa yang paling mendekati nilai yang valid."""
@@ -211,9 +211,7 @@ def start_timeout_timer():
 
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
-                reset_transaction()
-                transaction_done.set()
-                return
+                trigger_transaction()
         if remaining_time == 0:
                 # *🔥 Timeout tercapai, hentikan transaksi*
                 transaction_active = False
@@ -231,9 +229,8 @@ def start_timeout_timer():
 
                 # *🔥 Kirim status transaksi*
                 send_transaction_status()
-                reset_transaction()
-                transaction_done.set()
-                return # *Hentikan loop setelah timeout*
+
+                break  # *Hentikan loop setelah timeout*
 
         # *Tampilkan waktu timeout di terminal*
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
@@ -306,13 +303,12 @@ def get_bill_acceptor_status():
         "message": "Bill acceptor siap digunakan"
     }), 200  # 200 (OK)
 
-# 📌 API untuk Memulai Transaksi
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time
     
     while True:
         if transaction_active:
-            time.sleep(1)
+            time.sleep(1) 
             continue
 
         log_transaction("🔍 Mencari payment token terbaru...")
@@ -357,17 +353,9 @@ def trigger_transaction():
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
             time.sleep(1)
+    return jsonify({"status": "success", "message": "Transaksi dimulai"}), 200
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
     threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
-while True:
-    transaction_done.clear()  # Reset event sebelum memulai transaksi baru
-
-    # Mulai transaksi (kode ini bisa berbeda tergantung implementasi kamu)
-    print("🟢 Menunggu transaksi baru...")
-    transaction_active = True
-    total_inserted = 0  # Reset jumlah uang yang masuk
-    # Jalankan timer di thread terpisah
-    threading.Thread(target=start_timeout_timer, daemon=True).start()
