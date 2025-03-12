@@ -39,12 +39,6 @@ LOG_FILE = os.path.join(LOG_DIR, "log.txt")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
-def log_transaction(message):
-    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    with open(LOG_FILE, "a") as log:
-        log.write(f"{timestamp} {message}\n")
-    print(f"{timestamp} {message}")
-
 # 📌 Inisialisasi Flask
 app = Flask(__name__)
 
@@ -60,7 +54,8 @@ product_price = 0
 last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
-transaction_lock = threading.Lock()  # Menambahkan Lock
+transaction_lock = threading.Lock()
+log_lock = threading.Lock()
 
 # 📌 Inisialisasi pigpio
 pi = pigpio.pi()
@@ -72,6 +67,13 @@ pi.set_mode(BILL_ACCEPTOR_PIN, pigpio.INPUT)
 pi.set_pull_up_down(BILL_ACCEPTOR_PIN, pigpio.PUD_UP)
 pi.set_mode(EN_PIN, pigpio.OUTPUT)
 pi.write(EN_PIN, 0)
+
+def log_transaction(message):
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    with log_lock:
+        with open(LOG_FILE, "a") as log:
+            log.write(f"{timestamp} {message}\n")
+    print(f"{timestamp} {message}")
 
 # 📌 Fungsi GET ke API Invoice
 def fetch_invoice_details():
