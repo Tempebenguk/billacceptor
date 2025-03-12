@@ -294,14 +294,9 @@ def trigger_transaction():
         log_transaction("[DEBUG] Thread trigger_transaction sudah berjalan, tidak membuat ulang.")
         return
 
-    trigger_transaction_event.set()  
+    trigger_transaction_event.set()
 
-    while True:
-        if transaction_active:
-            log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
-            time.sleep(5)
-            continue
-
+    while not transaction_active:
         log_transaction("🔍 Mencari payment token terbaru...")
 
         try:
@@ -311,15 +306,16 @@ def trigger_transaction():
             if response.status_code == 200 and "data" in response_data:
                 for token_data in response_data["data"]:
                     created_time = datetime.datetime.strptime(token_data["CreatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ") 
-                    created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
+                    created_time = created_time.replace(tzinfo=datetime.timezone.utc)  
                     age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
 
                     payment_token = token_data["PaymentToken"]
 
                     # Cek apakah token sudah diproses sebelumnya
                     if payment_token in processed_tokens:
-                        log_transaction(f"⚠️ Token {payment_token} sudah diproses, mencari lagi...")
-                        continue  # Lewati token ini
+                        log_transaction(f"⚠️ Token {payment_token} sudah diproses, tidur 3 detik sebelum mencari lagi...")
+                        time.sleep(3)
+                        continue  
 
                     if age_in_minutes <= 3:  
                         log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
@@ -338,7 +334,7 @@ def trigger_transaction():
                                 last_pulse_received_time = time.time()
                                 log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
 
-                                processed_tokens.add(payment_token)  # Simpan token yang diproses
+                                processed_tokens.add(payment_token)  
                                 pi.write(EN_PIN, 1)
                                 start_timeout_timer()
                                 return
@@ -352,9 +348,8 @@ def trigger_transaction():
             log_transaction(f"⚠️ ERROR: {e}")
             time.sleep(1)
 
-        finally:
-            trigger_transaction_event.clear()
-
+    # Pastikan flag thread dilepas setelah loop berhenti
+    trigger_transaction_event.clear()
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
