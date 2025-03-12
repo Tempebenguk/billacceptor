@@ -57,7 +57,6 @@ timeout_thread = None
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
-processed_tokens = set()
 
 # Inisialisasi pigpio
 pi = pigpio.pi()
@@ -179,6 +178,7 @@ def count_pulse(gpio, level, tick):
             timeout_thread.start()
 
 # Fungsi untuk menangani timeout & pembayaran sukses
+
 def start_timeout_timer():
     global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
 
@@ -247,15 +247,6 @@ def process_final_pulse_count():
     pending_pulse_count = 0  # Reset setelah diproses
     pi.write(EN_PIN, 1)  # Hidupkan kembali EN_PIN setelah koreksi
     print("✅ Koreksi selesai, EN_PIN diaktifkan kembali")
-    
-def process_payment(token):
-    if token in processed_tokens:
-        print(f"⚠️ Token {token} sudah diproses sebelumnya, abaikan.")
-        return
-    
-    # Lakukan proses pembayaran...
-    
-    processed_tokens.add(token)  # Simpan token yang sudah diproses
 
 # Reset transaksi setelah selesai
 def reset_transaction():
@@ -294,7 +285,7 @@ def trigger_transaction():
             log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
             time.sleep(5)
             continue
-
+        
         log_transaction(f"[DEBUG] Thread aktif saat ini: {threading.enumerate()}")
         log_transaction("🔍 Mencari payment token terbaru...")
 
@@ -310,12 +301,6 @@ def trigger_transaction():
 
                     if age_in_minutes <= 3:  
                         payment_token = token_data["PaymentToken"]
-                        
-                        # ✅ Cek apakah token sudah diproses sebelumnya
-                        if payment_token in processed_tokens:
-                            log_transaction(f"⚠️ Token {payment_token} sudah diproses, abaikan.")
-                            continue
-
                         log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
                         invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
@@ -333,10 +318,6 @@ def trigger_transaction():
                                 log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
                                 pi.write(EN_PIN, 1)
                                 threading.Thread(target=start_timeout_timer, daemon=True).start()
-
-                                # ✅ Simpan token ke dalam daftar yang sudah diproses
-                                process_payment(payment_token)
-
                                 return
                             else:
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
