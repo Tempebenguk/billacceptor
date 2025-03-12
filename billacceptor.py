@@ -331,5 +331,8 @@ def trigger_transaction():
 
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
-    threading.Thread(target=trigger_transaction, daemon=True).start()
+    if not any(thread.name == "TransactionThread" for thread in threading.enumerate()):
+        transaction_thread = threading.Thread(target=trigger_transaction, daemon=True, name="TransactionThread")
+        transaction_thread.start()
+    #threading.Thread(target=trigger_transaction, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
