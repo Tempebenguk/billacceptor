@@ -320,7 +320,8 @@ def transaction_worker():
                                 log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
                                 pi.write(EN_PIN, 1)
                                 threading.Thread(target=start_timeout_timer, daemon=True).start()
-                                return
+                                continue  # Jaga loop tetap berjalan
+
                             else:
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
@@ -332,18 +333,16 @@ def transaction_worker():
             log_transaction("[DEBUG] Error terjadi, tidur selama 1 detik sebelum retry...")
             time.sleep(1)
 
-def trigger_transaction():
-    """Memastikan hanya satu thread trigger_transaction yang berjalan."""
+def monitor_transaction_thread():
+    """Monitor dan restart thread jika mati."""
     global transaction_thread
-
-    with thread_lock:
-        if transaction_thread and transaction_thread.is_alive():
-            log_transaction("[DEBUG] trigger_transaction sudah berjalan, tidak membuat yang baru.")
-            return
-        
-        log_transaction("[DEBUG] Memulai thread trigger_transaction")
-        transaction_thread = threading.Thread(target=transaction_worker, daemon=True)
-        transaction_thread.start()
+    while True:
+        with thread_lock:
+            if transaction_thread is None or not transaction_thread.is_alive():
+                log_transaction("[DEBUG] Thread mati, memulai ulang trigger_transaction...")
+                transaction_thread = threading.Thread(target=transaction_worker, daemon=True)
+                transaction_thread.start()
+        time.sleep(2)  # Cek setiap 2 detik
 if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
