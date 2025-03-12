@@ -281,7 +281,7 @@ def trigger_transaction():
     
     while True:
         if transaction_active:
-            time.sleep(5) 
+            time.sleep(1) 
             continue
 
         log_transaction("🔍 Mencari payment token terbaru...")
@@ -322,7 +322,7 @@ def trigger_transaction():
                                 log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
             log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
-            time.sleep(1)
+            time.sleep(5)
 
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengambil daftar payment token: {e}")
