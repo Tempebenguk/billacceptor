@@ -274,6 +274,7 @@ def process_final_pulse_count():
 # Reset transaksi setelah selesai
 def reset_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count, pending_pulse_count
+    
     transaction_active = False
     total_inserted = 0
     id_trx = None
@@ -282,7 +283,9 @@ def reset_transaction():
     last_pulse_received_time = time.time()  
     insufficient_payment_count = 0  
     pending_pulse_count = 0  
-    log_transaction("🔄 Transaksi di-reset ke default.")
+    trigger_transaction_event.clear()  # 🛠️ Tambahkan ini untuk reset event
+    log_transaction("🔄 Transaksi di-reset ke default, event trigger_transaction di-clear.")
+
 
 @app.route('/api/status', methods=['GET'])
 def get_bill_acceptor_status():
