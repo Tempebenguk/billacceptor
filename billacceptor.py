@@ -61,8 +61,6 @@ last_pulse_received_time = time.time()
 timeout_thread = None  # 🔥 Simpan thread timeout agar tidak dobel
 insufficient_payment_count = 0
 transaction_done = threading.Event()
-timeout_event = threading.Event()
-timeout_thread = None
 
 
 # 📌 Inisialisasi pigpio
@@ -152,21 +150,6 @@ def closest_valid_pulse(pulses):
         return 2
     closest_pulse = min(PULSE_MAPPING.keys(), key=lambda x: abs(x - pulses) if x != 1 else float("inf"))
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
-def run_timeout_timer():
-    global timeout_event
-    timeout_event.clear()
-    timeout = 180  # Timeout dalam 180 detik (3 menit)
-
-    while timeout > 0:
-        if timeout_event.is_set():
-            log_transaction("🛑 Timeout dibatalkan.")
-            return
-        log_transaction(f"⏳ Timeout dalam {timeout} detik...")
-        time.sleep(1)
-        timeout -= 1
-
-    log_transaction("⚠️ Timeout terjadi! Transaksi dibatalkan.")
-    # Tambahkan logika pembatalan transaksi jika diperlukan
 
 # 📌 Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
@@ -207,7 +190,7 @@ def count_pulse(gpio, level, tick):
 # 📌 Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
     """Mengatur timer untuk mendeteksi timeout transaksi."""
-    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx, timeout_thread
+    global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
 
     while transaction_active:
         current_time = time.time()
@@ -251,16 +234,10 @@ def start_timeout_timer():
                 reset_transaction()
                 transaction_done.set()
                 return # *Hentikan loop setelah timeout*
-        if timeout_thread and timeout_thread.is_alive():
-            log_transaction("⏳ Timer masih berjalan, tidak membuat thread baru.")
-            return
 
         # *Tampilkan waktu timeout di terminal*
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
-        log_transaction("🚀 Memulai timer timeout...")
-        timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
-        timeout_thread.start()
 
         # # *🔥 Cek apakah cukup uang setelah 2 detik tanpa pulsa tambahan*
         # if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
@@ -304,7 +281,7 @@ def process_final_pulse_count():
 
 # 📌 Reset transaksi setelah selesai
 def reset_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count, timeout_event
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count
     transaction_active = False
     total_inserted = 0
     id_trx = None
@@ -312,7 +289,6 @@ def reset_transaction():
     product_price = 0
     last_pulse_received_time = time.time()  # 🔥 Reset waktu terakhir pulsa diterima
     insufficient_payment_count = 0  # 🔥 Reset penghitung pembayaran kurang
-    timeout_event.set()
     log_transaction("🔄 Transaksi di-reset ke default.")
 
 @app.route('/api/status', methods=['GET'])
