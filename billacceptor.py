@@ -274,7 +274,6 @@ def process_final_pulse_count():
 # Reset transaksi setelah selesai
 def reset_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, insufficient_payment_count, pending_pulse_count
-    
     transaction_active = False
     total_inserted = 0
     id_trx = None
@@ -283,9 +282,7 @@ def reset_transaction():
     last_pulse_received_time = time.time()  
     insufficient_payment_count = 0  
     pending_pulse_count = 0  
-    trigger_transaction_event.clear()  # 🛠️ Tambahkan ini untuk reset event
-    log_transaction("🔄 Transaksi di-reset ke default, event trigger_transaction di-clear.")
-
+    log_transaction("🔄 Transaksi di-reset ke default.")
 
 @app.route('/api/status', methods=['GET'])
 def get_bill_acceptor_status():
@@ -301,8 +298,14 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
-def check_threads():
-    log_transaction(f"[DEBUG] 🔍 Daftar thread aktif: {[t.name for t in threading.enumerate()]}")
+import time
+import datetime
+import requests
+
+import time
+import datetime
+import requests
+
 def trigger_transaction():
     global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
 
@@ -310,16 +313,13 @@ def trigger_transaction():
         log_transaction("[DEBUG] Thread trigger_transaction sudah berjalan, tidak membuat ulang.")
         return
 
-    trigger_transaction_event.set()  # Tandai bahwa thread sudah berjalan
+    trigger_transaction_event.set()
 
     while True:
-        with transaction_lock:
-            if transaction_active:
-                log_transaction("[DEBUG] Transaksi masih aktif, menunggu...")
-                time.sleep(3)
-                return  # Keluar dari fungsi jika transaksi masih berlangsung
-
-            transaction_active = True  # Tandai bahwa transaksi baru dimulai
+        if transaction_active:
+            log_transaction("[DEBUG] Transaksi sedang berlangsung, menunggu transaksi selesai...")
+            time.sleep(3)
+            continue
 
         log_transaction("🔍 Mencari payment token terbaru...")
 
@@ -335,48 +335,47 @@ def trigger_transaction():
 
                     payment_token = token_data["PaymentToken"]
 
-                    with transaction_lock:
-                        if payment_token in processed_tokens:
-                            log_transaction(f"⚠️ Token {payment_token} sudah diproses, menunggu transaksi baru...")
-                            time.sleep(3)
-                            return  # Keluar dari fungsi jika token sudah diproses
+                    if transaction_active:
+                        log_transaction("[DEBUG] Transaksi masih aktif, menunggu...")
+                        return  
 
-                        if age_in_minutes <= 3:  
-                            log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
+                    if payment_token in processed_tokens:
+                        log_transaction(f"⚠️ Token {payment_token} sudah diproses, tidur 3 detik sebelum mencari lagi...")
+                        time.sleep(3)
+                        continue  
 
-                            invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
-                            invoice_data = invoice_response.json()
+                    if age_in_minutes <= 3:  
+                        log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
-                            if invoice_response.status_code == 200 and "data" in invoice_data:
-                                invoice = invoice_data["data"]
-                                if not invoice.get("isPaid", False):
-                                    id_trx = invoice["ID"]
-                                    product_price = int(invoice["productPrice"])
+                        invoice_response = requests.get(f"{INVOICE_API}{payment_token}", timeout=5)
+                        invoice_data = invoice_response.json()
 
-                                    pending_pulse_count = 0  
-                                    last_pulse_received_time = time.time()
-                                    log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+                        if invoice_response.status_code == 200 and "data" in invoice_data:
+                            invoice = invoice_data["data"]
+                            if not invoice.get("isPaid", False):
+                                id_trx = invoice["ID"]
+                                product_price = int(invoice["productPrice"])
 
-                                    processed_tokens.add(payment_token)  
-                                    pi.write(EN_PIN, 1)
-                                    start_timeout_timer()
-                                    return
-                                else:
-                                    log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
+                                transaction_active = True
+                                pending_pulse_count = 0  
+                                last_pulse_received_time = time.time()
+                                log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
+
+                                processed_tokens.add(payment_token)  
+                                pi.write(EN_PIN, 1)
+                                start_timeout_timer()
+                                return
+                            else:
+                                log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
+
+            log_transaction("[DEBUG] Tidak ada token baru, tidur selama 5 detik...")
+            time.sleep(5)
 
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ ERROR: {e}")
             time.sleep(1)
 
         finally:
-            with transaction_lock:
-                if not transaction_active:
-                    log_transaction("[DEBUG] Tidak ada transaksi aktif, tidak perlu mengirim status")
-                    return  
-
-                log_transaction("🚀 Mengirim status transaksi...")
-                transaction_active = False  # Transaksi selesai, reset status
-
             trigger_transaction_event.clear()  # Hapus event agar bisa mencari token baru
             log_transaction("[DEBUG] Thread trigger_transaction selesai, kembali mencari token.")
 
@@ -384,9 +383,8 @@ if __name__ == "__main__":
     pi.callback(BILL_ACCEPTOR_PIN, pigpio.RISING_EDGE, count_pulse)
 
     if not trigger_transaction_event.is_set():
-        trigger_transaction_event.set()  # Tandai bahwa thread sudah berjalan
         log_transaction("[DEBUG] Memulai thread trigger_transaction")
         transaction_thread = threading.Thread(target=trigger_transaction, daemon=True, name="TransactionThread")
         transaction_thread.start()
+
     app.run(host="0.0.0.0", port=5000, debug=True)
-    check_threads()
