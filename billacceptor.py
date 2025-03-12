@@ -56,6 +56,9 @@ timeout_thread = None
 insufficient_payment_count = 0
 transaction_lock = threading.Lock()
 log_lock = threading.Lock()
+transaction_thread = None  # Variabel global untuk menyimpan thread
+stop_timeout_event = threading.Event()
+timeout_thread = None  # Variabel untuk menyimpan thread timeout yang sedang berjalan
 
 # Fungsi log transaction
 def log_transaction(message):
@@ -176,51 +179,77 @@ def count_pulse(gpio, level, tick):
             timeout_thread.start()
 
 # Fungsi untuk menangani timeout & pembayaran sukses
-
 def start_timeout_timer():
     global total_inserted, product_price, transaction_active, last_pulse_received_time, id_trx
 
-    with transaction_lock: 
-        while transaction_active:
-            current_time = time.time()
-            remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time))) 
-            if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
-                    process_final_pulse_count()
-                    continue
-            if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
-                    transaction_active = False
-                    pi.write(EN_PIN, 0)  
+    stop_timeout_event.clear()  # Reset event agar thread bisa berjalan
+    log_transaction("⏳ Timeout Timer dimulai...")
 
-                    overpaid = max(0, total_inserted - product_price) 
+    while transaction_active:
+        if stop_timeout_event.is_set():
+            log_transaction("🛑 Timeout Timer dihentikan.")
+            break  # Hentikan thread jika event di-set
 
-                    if total_inserted == product_price:
-                        log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-                    else:
-                        log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+        current_time = time.time()
+        remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))
 
-                    # Kirim status transaksi
-                    send_transaction_status()
-                    trigger_transaction()
-            if remaining_time == 0:
-                    # imeout tercapai, hentikan transaksi
-                    transaction_active = False
-                    pi.write(EN_PIN, 0) 
+        if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
+            process_final_pulse_count()
+            continue
 
-                    remaining_due = max(0, product_price - total_inserted)
-                    overpaid = max(0, total_inserted - product_price) 
+        if (current_time - last_pulse_received_time) >= 2 and total_inserted >= product_price:
+            transaction_active = False
+            pi.write(EN_PIN, 0)  
+            overpaid = max(0, total_inserted - product_price) 
 
-                    if total_inserted < product_price:
-                        log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
-                    elif total_inserted == product_price:
-                        log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
-                    else:
-                        log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+            if total_inserted == product_price:
+                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
+            else:
+                log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
 
-                    send_transaction_status()
-                    break 
+            send_transaction_status()
+            stop_timeout_event.set()  # Hentikan thread timeout sebelum memulai transaksi baru
+            trigger_transaction()
+            break
 
-            print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
-            time.sleep(1)
+        if remaining_time == 0:
+            # Timeout tercapai, hentikan transaksi
+            transaction_active = False
+            pi.write(EN_PIN, 0) 
+
+            remaining_due = max(0, product_price - total_inserted)
+            overpaid = max(0, total_inserted - product_price) 
+
+            if total_inserted < product_price:
+                log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
+            elif total_inserted == product_price:
+                log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
+            else:
+                log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+
+            send_transaction_status()
+            stop_timeout_event.set()  # Hentikan thread timeout sebelum keluar
+            break 
+
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
+        time.sleep(1)
+
+    log_transaction("✅ Timeout Timer berakhir.")
+
+# Fungsi untuk memastikan hanya ada satu thread timeout berjalan
+def start_or_reset_timeout():
+    global timeout_thread, stop_timeout_event
+    
+    # Hentikan thread timeout jika sedang berjalan
+    stop_timeout_event.set()
+    time.sleep(1)  # Beri waktu agar thread lama bisa berhenti
+
+    # Reset event untuk thread baru
+    stop_timeout_event = threading.Event()
+    
+    timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+    timeout_thread.start()
+    log_transaction("✅ Thread timeout baru dibuat.")
 
 def process_final_pulse_count():
     """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
@@ -273,11 +302,15 @@ def get_bill_acceptor_status():
         "status": "success",
         "message": "Bill acceptor siap digunakan"
     }), 200 
+import threading
+
+transaction_thread = None  # Variabel global untuk menyimpan thread
+
 def trigger_transaction():
-    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count
+    global transaction_active, total_inserted, id_trx, payment_token, product_price, last_pulse_received_time, pending_pulse_count, transaction_thread
     
     while True:
-        with transaction_lock:  # Lock diaktifkan untuk mencegah thread lain mengakses kode ini bersamaan
+        with transaction_lock:
             if transaction_active:
                 log_transaction("[DEBUG] Transaksi aktif, tidur selama 5 detik...")
                 time.sleep(5)
@@ -296,7 +329,7 @@ def trigger_transaction():
                         created_time = created_time.replace(tzinfo=datetime.timezone.utc) 
                         age_in_minutes = (datetime.datetime.now(datetime.timezone.utc) - created_time).total_seconds() / 60
 
-                        if age_in_minutes <= 3:  
+                        if age_in_minutes <= 3:
                             payment_token = token_data["PaymentToken"]
                             log_transaction(f"[DEBUG] Token ditemukan: {payment_token}, umur: {age_in_minutes:.2f} menit")
 
@@ -310,11 +343,18 @@ def trigger_transaction():
                                     product_price = int(invoice["productPrice"])
 
                                     transaction_active = True
-                                    pending_pulse_count = 0 
+                                    pending_pulse_count = 0
                                     last_pulse_received_time = time.time()
                                     log_transaction(f"🔔 Transaksi dimulai! ID: {id_trx}, Token: {payment_token}, Tagihan: Rp.{product_price}")
                                     pi.write(EN_PIN, 1)
-                                    threading.Thread(target=start_timeout_timer, daemon=True).start()
+
+                                    # Cek apakah thread sudah berjalan sebelum membuat yang baru
+                                    if transaction_thread is None or not transaction_thread.is_alive():
+                                        transaction_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+                                        transaction_thread.start()
+                                    else:
+                                        log_transaction("⚠️ Thread timeout sudah berjalan, tidak membuat ulang.")
+
                                     continue
                                 else:
                                     log_transaction(f"⚠️ Invoice {payment_token} sudah dibayar, mencari lagi...")
