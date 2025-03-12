@@ -11,10 +11,10 @@ BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
 
 # Konfigurasi transaksi
-TIMEOUT = 15
+TIMEOUT = 180
 DEBOUNCE_TIME = 0.05
 TOLERANCE = 2
-MAX_RETRY = 0 
+MAX_RETRY = 2 
 
 # Mapping jumlah pulsa ke nominal uang
 PULSE_MAPPING = {
@@ -129,7 +129,7 @@ def send_transaction_status():
                     pi.write(EN_PIN, 1)  
                 else:
                     log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Silakan lanjutkan memasukkan uang...")
-                    #last_pulse_received_time = time.time()
+                    last_pulse_received_time = time.time()
                     transaction_active = True  
                     pi.write(EN_PIN, 1)  
                     start_timeout_timer()  
@@ -178,8 +178,8 @@ def count_pulse(gpio, level, tick):
         if pending_pulse_count == 0:
             pi.write(EN_PIN, 0)
         pending_pulse_count += 1
-        #last_pulse_time = current_time
-        #last_pulse_received_time = current_time 
+        last_pulse_time = current_time
+        last_pulse_received_time = current_time 
         print(f"🔢 Pulsa diterima: {pending_pulse_count}")  
         if timeout_thread is None or not timeout_thread.is_alive():
             timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
