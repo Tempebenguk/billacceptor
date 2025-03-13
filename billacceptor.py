@@ -59,7 +59,7 @@ log_lock = threading.Lock()
 trigger_transaction_event = threading.Event()
 processed_tokens = set()
 timeout_event = threading.Event()  # Event untuk menghentikan thread
-
+start_time = time.monotonic()  # Ambil waktu awal
 
 # Fungsi log transaction
 def log_transaction(message):
@@ -223,9 +223,10 @@ def start_timeout_timer():
 def run_timeout_timer():
     """Thread timeout yang berjalan selama transaksi berlangsung."""
     global transaction_active, total_inserted, product_price, last_pulse_received_time, pending_pulse_count
+    last_pulse_received_time = time.monotonic()  # Pastikan menggunakan monotonic time sebagai referensi
 
     while transaction_active:
-        current_time = time.time()
+        current_time = time.monotonic()
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))
 
         # Proses pulsa jika tidak ada pulsa baru selama 2 detik
@@ -303,7 +304,7 @@ def reset_transaction():
     id_trx = None
     payment_token = None
     product_price = 0
-    last_pulse_received_time = time.time()
+    last_pulse_received_time = time.monotonic()
     insufficient_payment_count = 0
     pending_pulse_count = 0
     log_transaction("🔄 Transaksi di-reset ke default.")
