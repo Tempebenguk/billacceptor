@@ -212,11 +212,16 @@ def start_timeout_timer():
     global timeout_thread, timeout_event
 
     with transaction_lock:
+        # Jika thread timeout sedang berjalan, hentikan dulu
         if timeout_thread and timeout_thread.is_alive():
-            timeout_event.set()  # Hentikan timeout lama sebelum membuat yang baru
-            timeout_thread.join()  # Tunggu hingga thread lama berhenti
+            log_transaction("🛑 Menghentikan thread timeout lama sebelum memulai yang baru...")
+            timeout_event.set()  # Hentikan thread lama
+            timeout_thread.join()  # Tunggu thread lama berhenti
+
+        # Reset event agar timeout bisa berjalan kembali
+        timeout_event.clear()
         
-        timeout_event.clear()  # Reset event untuk timeout baru
+        # Buat thread timeout baru
         timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
         timeout_thread.start()
 
@@ -225,51 +230,45 @@ def run_timeout_timer():
     global transaction_active, total_inserted, product_price, last_pulse_received_time, pending_pulse_count
 
     while transaction_active:
+        if timeout_event.is_set():  # Jika event timeout aktif, hentikan thread
+            log_transaction("🛑 Thread timeout dihentikan!")
+            break
+
         current_time = time.time()
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))
 
-        # Proses pulsa jika tidak ada pulsa baru selama 2 detik
+        # Jika tidak ada pulsa baru selama 2 detik, proses pulsa
         if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
             process_final_pulse_count()
-            continue  # Lanjutkan loop setelah pemrosesan
+            continue
 
         # Jika jumlah uang cukup, transaksi selesai
         if total_inserted >= product_price:
             transaction_active = False
-            pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi
+            pi.write(EN_PIN, 0)
 
             overpaid = max(0, total_inserted - product_price)
-
-            if total_inserted == product_price:
-                log_transaction(f"✅ Transaksi selesai, total: Rp.{total_inserted}")
-            else:
-                log_transaction(f"✅ Transaksi selesai, kelebihan: Rp.{overpaid}")
+            log_transaction(f"✅ Transaksi selesai! Total: Rp.{total_inserted}, Kelebihan: Rp.{overpaid}")
 
             send_transaction_status()
             trigger_transaction()
-            break  # Keluar dari loop setelah transaksi selesai
+            break
 
-        # Timeout: transaksi gagal
+        # Jika timeout habis, transaksi gagal
         if remaining_time == 0:
             transaction_active = False
             pi.write(EN_PIN, 0)
 
             remaining_due = max(0, product_price - total_inserted)
-            overpaid = max(0, total_inserted - product_price)
-
-            if total_inserted < product_price:
-                log_transaction(f"⏰ Timeout! Kurang: Rp.{remaining_due}")
-            elif total_inserted == product_price:
-                log_transaction(f"✅ Transaksi sukses, total: Rp.{total_inserted}")
-            else:
-                log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
+            log_transaction(f"⏰ Timeout! Sisa kekurangan: Rp.{remaining_due}")
 
             send_transaction_status()
             trigger_transaction()
-            break  # Keluar setelah timeout
+            break
 
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
+
 
 def process_final_pulse_count():
     """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
