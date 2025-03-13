@@ -167,16 +167,13 @@ def start_timeout_timer():
     global timeout_thread, timeout_event
 
     with transaction_lock:
-        # Jika thread timeout sedang berjalan, hentikan dulu
         if timeout_thread and timeout_thread.is_alive():
             log_transaction("🛑 Menghentikan thread timeout lama sebelum memulai yang baru...")
             timeout_event.set()  # Hentikan thread lama
-            timeout_thread.join()  # Tunggu thread lama berhenti
+            if timeout_thread is not threading.current_thread():
+                timeout_thread.join()  # Tunggu thread lama berhenti
 
-        # Reset event agar timeout bisa berjalan kembali
-        timeout_event.clear()
-        
-        # Buat thread timeout baru
+        timeout_event.clear()  # Reset event agar timeout bisa berjalan lagi
         timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
         timeout_thread.start()
 
@@ -284,13 +281,13 @@ def trigger_transaction():
         log_transaction("[DEBUG] Thread trigger_transaction sudah berjalan, tidak membuat ulang.")
         return
 
-    trigger_transaction_event.set()
+    trigger_transaction_event.set()  # Tandai bahwa thread ini sudah berjalan
 
     while True:
         if transaction_active:
             log_transaction("[DEBUG] Transaksi sedang berlangsung, menunggu transaksi selesai...")
             time.sleep(3)
-            continue
+            continue  # Tunggu transaksi selesai sebelum mencari token baru
 
         log_transaction("🔍 Mencari payment token terbaru...")
 
