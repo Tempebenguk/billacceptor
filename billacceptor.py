@@ -137,7 +137,7 @@ def send_transaction_status():
                     transaction_active = True  
                     pi.write(EN_PIN, 1)  
                     start_timeout_timer()
-                    #COOLDOWN DOUBle
+                    
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
