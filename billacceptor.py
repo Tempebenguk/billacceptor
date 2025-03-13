@@ -117,48 +117,6 @@ def send_transaction_status():
                 log_transaction(f"✅ Pembayaran sukses: {res_data.get('message')}, Waktu: {res_data.get('payment date')}")
                 reset_transaction()  # Reset transaksi setelah sukses
                 return
-            elif response.status_code == 400:
-                res_data = response.json() if response.content else {}
-                error_message = res_data.get("error") or res_data.get("message", "Error tidak diketahui")
-
-                log_transaction(f"⚠️ Gagal ({response.status_code}): {error_message}")
-
-                if "Insufficient payment" in error_message:
-                    insufficient_payment_count += 1
-
-                    if insufficient_payment_count > MAX_RETRY:
-                        log_transaction("🚫 Pembayaran kurang dan telah melebihi batas retry, transaksi dibatalkan!")
-                        reset_transaction()
-                        pi.write(EN_PIN, 1)
-
-                        # Cari token baru setelah transaksi gagal
-                        log_transaction("🔄 Kembali mencari token baru setelah transaksi gagal...")
-                        trigger_transaction()
-                    else:
-                        log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Silakan lanjutkan memasukkan uang...")
-
-                        last_pulse_received_time = time.time()
-                        transaction_active = True
-                        pi.write(EN_PIN, 1)
-
-                        # **Pastikan tidak ada timeout ganda**
-                        if timeout_thread is not None:
-                            timeout_event.set()  # Batalkan timeout sebelumnya sebelum memulai yang baru
-
-                        start_timeout_timer()  # Mulai timeout baru
-                        return  # **Pastikan kembali ke loop utama**
-
-
-                elif "Payment already completed" in error_message:
-                    log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
-                    pi.write(EN_PIN, 1)
-
-
-                else:
-                    log_transaction(f"⚠️ Error lain: {error_message}")
-
-            else:
-                log_transaction(f"⚠️ Respon tidak terduga: {response.status_code} - {response.text}")
 
         except requests.exceptions.RequestException as e:
             log_transaction(f"⚠️ Gagal mengirim status transaksi (percobaan {attempt + 1}/{max_attempts}): {e}")
@@ -170,9 +128,6 @@ def send_transaction_status():
 
     log_transaction("🚫 Gagal mengirim transaksi setelah semua percobaan. Reset transaksi!")
     reset_transaction()
-
-    # **Pastikan loop kembali ke main dengan mencari transaksi baru**
-    log_transaction("🔄 Mencari transaksi baru...")
     trigger_transaction()
 
 def closest_valid_pulse(pulses):
@@ -224,6 +179,7 @@ def start_timeout_timer():
         # Buat thread timeout baru
         timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
         timeout_thread.start()
+
 
 def run_timeout_timer():
     """Thread timeout yang berjalan selama transaksi berlangsung."""
