@@ -191,6 +191,10 @@ def count_pulse(gpio, level, tick):
             timeout_thread.start()
 
 # Fungsi untuk menangani timeout & pembayaran sukses
+import threading
+import time
+
+# Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
     """Timer yang memastikan transaksi memiliki batas waktu."""
     global total_inserted, product_price, transaction_active, last_pulse_received_time, timeout_thread
@@ -210,12 +214,16 @@ def run_timeout_timer():
         current_time = time.time()
         remaining_time = max(0, int(TIMEOUT - (current_time - last_pulse_received_time)))
 
-        # Proses pulsa jika tidak ada pulsa baru selama 2 detik
-        if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
-            process_final_pulse_count()
-            continue  # Lanjutkan loop setelah pemrosesan
+        # 🔹 Gunakan flush=True agar print cooldown lebih stabil
+        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="", flush=True)
 
-        # Jika jumlah uang cukup, transaksi selesai
+        # 🔹 Cek pending pulse jika tidak ada pulsa baru dalam 2 detik
+        with transaction_lock:
+            if (current_time - last_pulse_received_time) >= 2 and pending_pulse_count > 0:
+                process_final_pulse_count()
+                continue  # Lanjutkan loop setelah pemrosesan
+
+        # 🔹 Jika jumlah uang cukup, transaksi selesai
         if total_inserted >= product_price:
             transaction_active = False
             pi.write(EN_PIN, 0)  # Matikan EN_PIN setelah transaksi
@@ -231,7 +239,7 @@ def run_timeout_timer():
             trigger_transaction()
             break  # Keluar dari loop setelah transaksi selesai
 
-        # Timeout: transaksi gagal
+        # 🔹 Timeout: transaksi gagal
         if remaining_time == 0:
             transaction_active = False
             pi.write(EN_PIN, 0)
@@ -249,7 +257,6 @@ def run_timeout_timer():
             send_transaction_status()
             break  # Keluar setelah timeout
 
-        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
 def process_final_pulse_count():
