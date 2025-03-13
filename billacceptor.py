@@ -127,32 +127,37 @@ def send_transaction_status():
                 insufficient_payment_count += 1
                 log_transaction(f"🔄 Uang kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}")
 
-                if insufficient_payment_count > MAX_RETRY:
+                if insufficient_payment_count >= MAX_RETRY:
                     log_transaction("🚫 Pembayaran kurang melebihi batas! Transaksi dibatalkan.")
-                    reset_transaction()
-                    pi.write(EN_PIN, 0)  # Menonaktifkan bill acceptor
-                    transaction_active = False
+                    transaction_active = False  # Matikan transaksi
+                    pi.write(EN_PIN, 0)  # Bill acceptor dinonaktifkan
+                    reset_transaction()  # Reset hanya jika max retry tercapai
                 else:
-                    log_transaction("⏳ Menunggu uang tambahan... Aktifkan kembali bill acceptor.")
+                    log_transaction(f"🔄 Pembayaran kurang, percobaan {insufficient_payment_count}/{MAX_RETRY}. Silakan lanjutkan memasukkan uang...")
+                    
+                    # Pastikan transaction_active tetap berjalan
                     transaction_active = True
-                    pi.write(EN_PIN, 1)  # Mengaktifkan bill acceptor kembali
+                    pi.write(EN_PIN, 1)  # Bill acceptor tetap aktif
+                    
+                    # Pastikan waktu timeout diperbarui agar tidak langsung reset
                     last_pulse_received_time = time.time()
+
+                    # Jika belum mencapai retry maksimal, timer harus tetap berjalan
                     threading.Thread(target=start_timeout_timer, daemon=True).start()
 
             elif "Payment already completed" in error_message:
                 log_transaction("✅ Pembayaran sudah selesai sebelumnya. Reset transaksi.")
+                transaction_active = False
+                pi.write(EN_PIN, 0)
                 reset_transaction()
-                pi.write(EN_PIN, 0)  # Menonaktifkan bill acceptor
 
         else:
             log_transaction(f"⚠ Respon tidak terduga: {response.status_code}")
 
     except requests.exceptions.RequestException as e:
         log_transaction(f"⚠ Gagal mengirim status transaksi: {e}")
-    
-    reset_transaction()
-    trigger_transaction()
-        
+
+
 def closest_valid_pulse(pulses):
     """Mendapatkan jumlah pulsa yang paling mendekati nilai yang valid."""
     if pulses == 1:
