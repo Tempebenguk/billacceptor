@@ -208,13 +208,15 @@ def count_pulse(gpio, level, tick):
 
 # Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    """Timer yang memastikan transaksi memiliki batas waktu."""
-    global total_inserted, product_price, transaction_active, last_pulse_received_time, timeout_thread
+    """Memulai thread timeout hanya jika belum ada yang berjalan."""
+    global timeout_thread, timeout_event
 
     with transaction_lock:
         if timeout_thread and timeout_thread.is_alive():
-            return  # Jangan buat thread baru jika sudah ada
-
+            timeout_event.set()  # Hentikan timeout lama sebelum membuat yang baru
+            timeout_thread.join()  # Tunggu hingga thread lama berhenti
+        
+        timeout_event.clear()  # Reset event untuk timeout baru
         timeout_thread = threading.Thread(target=run_timeout_timer, daemon=True)
         timeout_thread.start()
 
