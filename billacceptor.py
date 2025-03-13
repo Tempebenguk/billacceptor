@@ -247,6 +247,7 @@ def run_timeout_timer():
                 log_transaction(f"✅ Transaksi sukses, kelebihan: Rp.{overpaid}")
 
             send_transaction_status()
+            trigger_transaction()
             break  # Keluar setelah timeout
 
         print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
