@@ -268,7 +268,7 @@ def run_timeout_timer():
             trigger_transaction()
             break  # Keluar setelah timeout
 
-        print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
+        print(f"⏳ Timeout dalam {remaining_time} detik...", end="")
         time.sleep(1)
 
 def process_final_pulse_count():
