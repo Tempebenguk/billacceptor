@@ -180,13 +180,10 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
         last_pulse_received_time = current_time 
         with print_lock:
-            print(f"🔢 Pulsa diterima: {pending_pulse_count}")
-
-        # Jangan reset timeout thread
+            print(f"🔢 Pulsa diterima: {pending_pulse_count}")  
         if timeout_thread is None or not timeout_thread.is_alive():
             timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
             timeout_thread.start()
- 
 
 # Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
