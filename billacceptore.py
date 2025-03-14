@@ -163,7 +163,6 @@ def closest_valid_pulse(pulses):
     return closest_pulse if abs(closest_pulse - pulses) <= TOLERANCE else None
 
 # Fungsi untuk menghitung pulsa
-# Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
     global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, pending_pulse_count, timeout_thread
@@ -181,7 +180,13 @@ def count_pulse(gpio, level, tick):
         last_pulse_time = current_time
         last_pulse_received_time = current_time 
         with print_lock:
-            print(f"🔢 Pulsa diterima: {pending_pulse_count}")  
+            print(f"🔢 Pulsa diterima: {pending_pulse_count}")
+
+        # Jangan reset timeout thread
+        if timeout_thread is None or not timeout_thread.is_alive():
+            timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
+            timeout_thread.start()
+ 
 
 # Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
