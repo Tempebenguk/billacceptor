@@ -9,6 +9,7 @@ import threading
 # Konfigurasi PIN GPIO
 BILL_ACCEPTOR_PIN = 14
 EN_PIN = 15
+ID_DEVICE = "bic01"
 
 # Konfigurasi transaksi
 TIMEOUT = 20
@@ -28,7 +29,7 @@ PULSE_MAPPING = {
 }
 
 # API URL
-TOKEN_API = "https://api-dev.xpdisi.id/invoice/device/bic01"
+TOKEN_API = f"https://api-dev.xpdisi.id/invoice/device/{ID_DEVICE}"
 INVOICE_API = "https://api-dev.xpdisi.id/invoice/"
 BILL_API = "https://api-dev.xpdisi.id/order/billacceptor"
 
