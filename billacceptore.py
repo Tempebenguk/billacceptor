@@ -172,7 +172,7 @@ def closest_valid_pulse(pulses):
 # Fungsi untuk menghitung pulsa
 def count_pulse(gpio, level, tick):
     """Menghitung pulsa dari bill acceptor dan mengonversinya ke nominal uang."""
-    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, pending_pulse_count, timeout_start_time
+    global pulse_count, last_pulse_time, total_inserted, last_pulse_received_time, product_price, pending_pulse_count, timeout_start_time, timeout_thread
 
     if not transaction_active:
         return
@@ -193,9 +193,8 @@ def count_pulse(gpio, level, tick):
             timeout_thread = threading.Thread(target=start_timeout_timer, daemon=True)
             timeout_thread.start()
 
-# Fungsi untuk menangani timeout & pembayaran sukses
 def start_timeout_timer():
-    global total_inserted, product_price, transaction_active, timeout_start_time, id_trx
+    global total_inserted, product_price, transaction_active, timeout_start_time, id_trx, timeout_thread
 
     with transaction_lock: 
         while transaction_active:
@@ -239,7 +238,6 @@ def start_timeout_timer():
             with print_lock:    
                 print(f"\r⏳ Timeout dalam {remaining_time} detik...", end="")
             time.sleep(1)
-
 
 def process_final_pulse_count():
     """Memproses pulsa yang terkumpul setelah tidak ada pulsa masuk selama 2 detik."""
