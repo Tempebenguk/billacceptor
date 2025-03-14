@@ -298,7 +298,7 @@ def trigger_transaction():
             time.sleep(1) 
             continue
 
-        log_transaction("🔍 Mencari payment token terbaru...")
+        print("🔍 Mencari payment token terbaru...")
         
         try:
             response = requests.get(TOKEN_API, timeout=1)
@@ -334,7 +334,7 @@ def trigger_transaction():
                             else:
                                 log_transaction(f"⚠ Invoice {payment_token} sudah dibayar, mencari lagi...")
 
-            log_transaction("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
+            print("✅ Tidak ada payment token yang memenuhi syarat. Menunggu...")
             time.sleep(1)
 
         except requests.exceptions.RequestException as e:
